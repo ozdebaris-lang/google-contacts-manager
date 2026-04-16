@@ -33,10 +33,19 @@ def _load_token_from_secrets():
 def _credentials_file() -> str:
     """credentials.json yolunu döndürür; secrets'tan geldiyse /tmp'e yazar."""
     try:
-        creds_json = _st_secrets().get("GOOGLE_CREDENTIALS", "")
-        if creds_json:
+        secrets = _st_secrets()
+        gc = secrets.get("GOOGLE_CREDENTIALS", {})
+        if gc:
+            import json
+            data = {"installed": {
+                "client_id": gc["client_id"],
+                "client_secret": gc["client_secret"],
+                "auth_uri": gc["auth_uri"],
+                "token_uri": gc["token_uri"],
+                "redirect_uris": ["http://localhost"],
+            }}
             with open(_TMP_CREDS, "w") as f:
-                f.write(creds_json)
+                json.dump(data, f)
             return _TMP_CREDS
     except Exception:
         pass
