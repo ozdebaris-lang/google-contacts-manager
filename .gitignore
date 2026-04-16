@@ -1,0 +1,7 @@
+credentials.json
+token.pickle
+.streamlit/secrets.toml
+__pycache__/
+*.pyc
+backups/
+.env
