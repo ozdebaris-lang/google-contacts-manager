@@ -432,6 +432,7 @@ def build_grid_options(df: pd.DataFrame):
         "_resource_name", headerName="", width=1, minWidth=1, maxWidth=1,
         editable=False, sortable=False, filter=False, resizable=False,
         suppressMovable=True, cellStyle=invisible_style, cellRenderer=empty_renderer,
+        pinned="right",
     )
     for hidden in ("_etag", "_phones_raw", "_emails_raw", "_addresses_raw", "_primary_phone_col"):
         gb.configure_column(hidden, hide=True)
