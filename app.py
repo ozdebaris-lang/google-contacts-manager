@@ -1033,8 +1033,10 @@ section[data-testid="stSidebar"] [data-testid="stMultiSelect"] span[data-baseweb
 
     # ── Grid (tam genişlik) ──────────────────────────────────────────────────
     reload_grid = should_reload or force_grid_reload
-    col_key = "_".join(st.session_state.visible_cols)
-    edited_df, grid_selection = render_grid(st.session_state.grid_data, reload=reload_grid, grid_key=f"mg_{col_key}")
+    if reload_grid:
+        st.session_state["_grid_key_v"] = st.session_state.get("_grid_key_v", 0) + 1
+    grid_key = f"mg_{st.session_state.get('_grid_key_v', 0)}"
+    edited_df, grid_selection = render_grid(st.session_state.grid_data, reload=reload_grid, grid_key=grid_key)
 
     # Seçimi kaydet (ekstra rerun olmadan)
     st.session_state.selected_rows = grid_selection
