@@ -54,15 +54,6 @@ def init_state():
 
 # ─── Auth ─────────────────────────────────────────────────────────────────────
 
-def _check_password(entered: str) -> bool:
-    try:
-        import streamlit as st
-        expected = st.secrets.get("APP_PASSWORD", "")
-        return bool(expected) and entered == expected
-    except Exception:
-        return False
-
-
 def handle_auth_page():
     st.markdown(
         "<h2 style='text-align:center;margin-top:3rem;'>📇 Google Contacts Manager</h2>",
@@ -83,22 +74,15 @@ def handle_auth_page():
 
     c1, c2, c3 = st.columns([1, 1, 1])
     with c2:
-        with st.form("login_form"):
-            pwd = st.text_input("Şifre", type="password", placeholder="Şifrenizi girin")
-            submitted = st.form_submit_button("🔑 Giriş Yap", use_container_width=True, type="primary")
-
-        if submitted:
-            if _check_password(pwd):
-                with st.spinner("Bağlanıyor…"):
-                    creds = auth.get_credentials()
-                if creds:
-                    st.session_state.service = contacts_api.build_service(creds)
-                    st.session_state.authenticated = True
-                    st.rerun()
-                else:
-                    st.error("Google bağlantısı başarısız.")
+        if st.button("🔑 Google ile Giriş Yap", type="primary", use_container_width=True):
+            with st.spinner("Bağlanıyor…"):
+                creds = auth.get_credentials()
+            if creds:
+                st.session_state.service = contacts_api.build_service(creds)
+                st.session_state.authenticated = True
+                st.rerun()
             else:
-                st.error("Hatalı şifre.")
+                st.error("Giriş başarısız.")
 
 
 # ─── Data loading ─────────────────────────────────────────────────────────────
