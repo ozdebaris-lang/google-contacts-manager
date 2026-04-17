@@ -490,7 +490,7 @@ function(p){
         header_checkbox=True,
         pre_selected_rows=st.session_state.get("selected_rows", []),
     )
-    gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=500)
+    gb.configure_pagination(enabled=False)
     gb.configure_grid_options(
         domLayout="normal",
         suppressRowClickSelection=False,
@@ -822,10 +822,9 @@ def main():
     # ── CSS: kompakt sidebar + geniş içerik ─────────────────────────────────
     st.markdown("""
 <style>
-/* ── Streamlit üst bar (Deploy / Settings menüsü) gizle ── */
-[data-testid="stDeployButton"] { display: none !important; }
-[data-testid="stToolbarActions"] { display: none !important; }
-.block-container { padding-top: 0.6rem !important; }
+/* ── Streamlit üst bar tamamen gizle ── */
+header[data-testid="stHeader"] { display: none !important; }
+.block-container { padding-top: 0.5rem !important; }
 
 /* Aksiyon Barı Konteynırı */
 .action-bar-container {
@@ -851,7 +850,7 @@ button[key="bulk_delete_btn"] {
 /* ── Tüm butonlar: yuvarlak köşe + hover animasyonu ── */
 .stButton > button {
     border-radius: 8px !important;
-    font-size: 0.72rem !important;
+    font-size: 0.68rem !important;
     font-weight: 500 !important;
     padding: 0.2rem 0.5rem !important;
     transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease !important;
@@ -892,7 +891,7 @@ hr { margin: 0.5rem 0 !important; opacity: 0.35 !important; }
 /* ════════════════════════════════════════════════════
    SIDEBAR
    ════════════════════════════════════════════════════ */
-section[data-testid="stSidebar"] { min-width:200px !important; max-width:220px !important; }
+section[data-testid="stSidebar"] { max-width:220px !important; }
 section[data-testid="stSidebar"] .block-container { padding:0.5rem 0.6rem !important; }
 
 /* Tüm sidebar yazıları küçük punto */
@@ -903,24 +902,24 @@ section[data-testid="stSidebar"] label,
 section[data-testid="stSidebar"] div,
 section[data-testid="stSidebar"] input,
 section[data-testid="stSidebar"] .stCaption,
-section[data-testid="stSidebar"] .stMarkdown { font-size:0.72rem !important; }
+section[data-testid="stSidebar"] .stMarkdown { font-size:0.68rem !important; }
 
 section[data-testid="stSidebar"] h1,
 section[data-testid="stSidebar"] h2,
 section[data-testid="stSidebar"] h3,
 section[data-testid="stSidebar"] h4,
 section[data-testid="stSidebar"] strong {
-    font-size:0.72rem !important; margin:0.2rem 0 0.1rem !important; font-weight:700 !important;
+    font-size:0.68rem !important; margin:0.2rem 0 0.1rem !important; font-weight:700 !important;
 }
 section[data-testid="stSidebar"] hr { margin:0.3rem 0 !important; }
 section[data-testid="stSidebar"] .stButton button {
-    font-size:0.72rem !important; padding:0.15rem 0.4rem !important;
+    font-size:0.68rem !important; padding:0.15rem 0.4rem !important;
 }
 section[data-testid="stSidebar"] .stSelectbox > div,
-section[data-testid="stSidebar"] .stTextInput > div { font-size:0.72rem !important; }
+section[data-testid="stSidebar"] .stTextInput > div { font-size:0.68rem !important; }
 
 /* Multiselect: her etiket ayrı satır */
-section[data-testid="stSidebar"] [data-testid="stMultiSelect"] { font-size:0.72rem !important; }
+section[data-testid="stSidebar"] [data-testid="stMultiSelect"] { font-size:0.68rem !important; }
 section[data-testid="stSidebar"] [data-testid="stMultiSelect"] [data-baseweb="select"] {
     flex-wrap: wrap !important;
 }
