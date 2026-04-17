@@ -516,12 +516,17 @@ def apply_filter(df: pd.DataFrame, filter_name: str) -> pd.DataFrame:
     if filter_name == "Şirketi/Ünvanı olmayanlar":
         return df[(df["Şirket"].str.strip() == "") & (df["Ünvan"].str.strip() == "")].reset_index(drop=True)
     if filter_name == "Yinelenen isimler":
-        full_name = (df["Ad"].str.strip() + " " + df["Soyad"].str.strip()).str.lower()
-        dupes = full_name[full_name.duplicated(keep=False) & (full_name.str.strip() != "")]
+        ad = df["Ad"].str.strip().str.lower()
+        soyad = df["Soyad"].str.strip().str.lower()
+        full_name = ad + "|" + soyad
+        has_name = (ad != "") | (soyad != "")
+        dupes = full_name[has_name & full_name.duplicated(keep=False)]
         return df[df.index.isin(dupes.index)].reset_index(drop=True)
     if filter_name == "Yinelenen telefonlar":
-        # Cep Telefonu'nu primary kaynak olarak kullan
-        phones = df["Cep Telefonu"].str.strip()
-        dupes = phones[phones.duplicated(keep=False) & (phones != "")]
-        return df[df.index.isin(dupes.index)].reset_index(drop=True)
+        cep = df["Cep Telefonu"].str.strip()
+        tel2 = df["2. Telefon"].str.strip()
+        all_phones = pd.concat([cep, tel2])
+        dup_phones = set(all_phones[all_phones.duplicated(keep=False) & (all_phones != "")].values)
+        mask = cep.isin(dup_phones) | tel2.isin(dup_phones)
+        return df[mask].reset_index(drop=True)
     return df  # "Tümü"
