@@ -55,28 +55,34 @@ def init_state():
 # ─── Auth ─────────────────────────────────────────────────────────────────────
 
 def handle_auth_page():
-    st.title("📇 Google Contacts Manager")
-    st.markdown("---")
+    st.markdown(
+        "<h2 style='text-align:center;margin-top:3rem;'>📇 Google Contacts Manager</h2>",
+        unsafe_allow_html=True,
+    )
+    st.markdown("<br>", unsafe_allow_html=True)
 
-    if not os.path.exists("credentials.json"):
+    cloud = auth.has_cloud_token()
+    has_creds = os.path.exists("credentials.json")
+
+    if not cloud and not has_creds:
         st.error(
             "**credentials.json bulunamadı.**\n\n"
             "GCP Console'dan bir OAuth Desktop App credential oluşturup "
-            "bu klasöre koy. Detaylar için README.md dosyasına bak."
+            "bu klasöre koy."
         )
         return
 
-    st.info("Google hesabınla giriş yap. Tarayıcında bir onay ekranı açılacak.")
-
-    if st.button("🔑 Google ile Giriş Yap", type="primary", use_container_width=False):
-        with st.spinner("OAuth akışı başlatılıyor…"):
-            creds = auth.get_credentials()
-        if creds:
-            st.session_state.service = contacts_api.build_service(creds)
-            st.session_state.authenticated = True
-            st.rerun()
-        else:
-            st.error("Giriş başarısız. credentials.json dosyasını kontrol et.")
+    c1, c2, c3 = st.columns([1, 1, 1])
+    with c2:
+        if st.button("🔑 Google ile Giriş Yap", type="primary", use_container_width=True):
+            with st.spinner("Bağlanıyor…"):
+                creds = auth.get_credentials()
+            if creds:
+                st.session_state.service = contacts_api.build_service(creds)
+                st.session_state.authenticated = True
+                st.rerun()
+            else:
+                st.error("Giriş başarısız.")
 
 
 # ─── Data loading ─────────────────────────────────────────────────────────────
@@ -831,14 +837,6 @@ def _render_action_bar(selected_rows: list):
 
 def main():
     init_state()
-
-    # Cloud deploy: secrets'ta token varsa otomatik giriş yap
-    if not st.session_state.authenticated and auth.has_cloud_token():
-        with st.spinner("Bağlanıyor…"):
-            creds = auth.get_credentials()
-        if creds:
-            st.session_state.service = contacts_api.build_service(creds)
-            st.session_state.authenticated = True
 
     if not st.session_state.authenticated:
         handle_auth_page()
