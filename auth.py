@@ -103,7 +103,8 @@ def get_credentials():
 def has_cloud_token() -> bool:
     """Secrets'ta token var mı? (otomatik giriş kararı için)"""
     try:
-        return bool(_st_secrets().get("GOOGLE_TOKEN", ""))
+        s = _st_secrets()
+        return bool(s["REFRESH_TOKEN"])
     except Exception:
         return False
 
