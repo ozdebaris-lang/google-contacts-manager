@@ -539,8 +539,10 @@ def render_grid(df_display: pd.DataFrame, reload: bool = True):
     """
     grid_options = build_grid_options(df_display)
 
-    aggrid_kwargs = dict(
+    response = AgGrid(
+        df_display,
         gridOptions=grid_options,
+        update_mode=GridUpdateMode.VALUE_CHANGED | GridUpdateMode.SELECTION_CHANGED,
         data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
         fit_columns_on_grid_load=False,
         theme="streamlit",
@@ -549,21 +551,6 @@ def render_grid(df_display: pd.DataFrame, reload: bool = True):
         enable_enterprise_modules=False,
         key="main_grid",
     )
-    try:
-        # st-aggrid >= 1.0: update_on + no reload_data
-        response = AgGrid(
-            df_display,
-            update_on=["cellValueChanged", "selectionChanged"],
-            **aggrid_kwargs,
-        )
-    except TypeError:
-        # st-aggrid < 1.0: eski API
-        response = AgGrid(
-            df_display,
-            update_mode=GridUpdateMode.VALUE_CHANGED | GridUpdateMode.SELECTION_CHANGED,
-            reload_data=reload,
-            **aggrid_kwargs,
-        )
 
     # Normalise response (dict vs AgGridReturn object)
     try:
