@@ -84,7 +84,7 @@ def get_credentials():
     if creds and creds.valid:
         return creds
 
-    if creds and creds.expired and creds.refresh_token:
+    if creds and creds.refresh_token:
         creds.refresh(Request())
         _save(creds)
         return creds
