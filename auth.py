@@ -21,27 +21,37 @@ def _st_secrets():
 
 
 def _load_token_from_secrets():
+    """Secrets'tan refresh_token kullanarak Credentials nesnesi oluştur."""
     try:
-        token_b64 = _st_secrets().get("GOOGLE_TOKEN", "")
-        if token_b64:
-            return pickle.loads(base64.b64decode(token_b64))
+        from google.oauth2.credentials import Credentials
+        s = _st_secrets()
+        refresh_token = s.get("REFRESH_TOKEN", "")
+        if not refresh_token:
+            return None
+        return Credentials(
+            token=None,
+            refresh_token=refresh_token,
+            token_uri=s.get("TOKEN_URI", "https://oauth2.googleapis.com/token"),
+            client_id=s.get("CLIENT_ID", ""),
+            client_secret=s.get("CLIENT_SECRET", ""),
+            scopes=["https://www.googleapis.com/auth/contacts"],
+        )
     except Exception:
-        pass
-    return None
+        return None
 
 
 def _credentials_file() -> str:
     """credentials.json yolunu döndürür; secrets'tan geldiyse /tmp'e yazar."""
     try:
-        secrets = _st_secrets()
-        gc = secrets.get("GOOGLE_CREDENTIALS", {})
-        if gc:
-            import json
+        import json
+        s = _st_secrets()
+        client_id = s.get("CLIENT_ID", "")
+        if client_id:
             data = {"installed": {
-                "client_id": gc["client_id"],
-                "client_secret": gc["client_secret"],
-                "auth_uri": gc["auth_uri"],
-                "token_uri": gc["token_uri"],
+                "client_id": client_id,
+                "client_secret": s.get("CLIENT_SECRET", ""),
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": s.get("TOKEN_URI", "https://oauth2.googleapis.com/token"),
                 "redirect_uris": ["http://localhost"],
             }}
             with open(_TMP_CREDS, "w") as f:
