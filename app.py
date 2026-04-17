@@ -602,9 +602,13 @@ def _apply_email_lowercase(resource_names: list) -> int:
         changed = False
         for col in ["E-posta", "2. E-posta"]:
             cur = pending.get(rn, {}).get(col, _s(row.get(col, "")))
-            new = cur.lower()
-            if new != cur:
-                _mark_bulk_edit(rn, col, new)
+            new_val = cur.lower()
+            if new_val != cur:
+                pending.setdefault(rn, {})[col] = new_val
+                for df_ref in [st.session_state.df, st.session_state.df_original]:
+                    mask = df_ref["_resource_name"] == rn
+                    if mask.any():
+                        df_ref.loc[mask, col] = new_val
                 changed = True
         if changed:
             count += 1
@@ -809,7 +813,13 @@ def _render_action_bar(selected_rows: list):
 
         if cols[5].button("@küçük", key="bulk_email_lower_btn", use_container_width=True, help="E-posta adreslerini küçük harfe çevir"):
             cnt = _apply_email_lowercase(resource_names)
-            st.toast(f"✅ {cnt} kişinin e-postası küçültüldü.")
+            if cnt:
+                st.toast(f"✅ {cnt} kişinin e-postası küçültüldü.")
+                st.session_state.grid_data = None
+                st.session_state.data_version += 1
+                st.rerun()
+            else:
+                st.toast("E-postalarda büyük harf bulunamadı.")
 
         group_names = sorted(st.session_state.groups_map_inv.keys())
         sel_group = cols[6].selectbox(
