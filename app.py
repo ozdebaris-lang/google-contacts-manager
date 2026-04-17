@@ -43,7 +43,7 @@ def init_state():
         "grid_data": None,       # AgGrid'e geçilen son veri
         "pending_edits": {},     # {resource_name: {field: yeni_değer}} — VALUE_CHANGED'da dolar
         "force_grid_reload": False,  # bulk op sonrası grid'i yenile
-        "visible_cols": ["Ad", "Soyad", "Cep Telefonu", "E-posta", "Şirket", "Etiketler"],
+        "visible_cols": ["Ad", "Soyad", "Cep Telefonu", "E-posta", "Şirket", "Etiketler", "Oluşturulma"],
         "detail_shown_for": None,  # en son dialog açılan rn — aynı satır için tekrar açılmaz
     }
     for k, v in defaults.items():
@@ -490,7 +490,7 @@ function(p){
         header_checkbox=True,
         pre_selected_rows=st.session_state.get("selected_rows", []),
     )
-    gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=50)
+    gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=100)
     gb.configure_grid_options(
         domLayout="normal",
         suppressRowClickSelection=False,
@@ -515,7 +515,7 @@ def render_grid(df_display: pd.DataFrame, reload: bool = True):
         fit_columns_on_grid_load=False,
         reload_data=reload,
         theme="streamlit",
-        height=600,
+        height=700,
         allow_unsafe_jscode=True,
         enable_enterprise_modules=False,
         key="main_grid",
