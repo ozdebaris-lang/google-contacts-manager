@@ -589,6 +589,28 @@ def _mark_bulk_edit(rn: str, col: str, new_val: str):
     st.session_state.force_grid_reload = True
 
 
+def _apply_email_lowercase(resource_names: list) -> int:
+    """E-posta ve 2. E-posta alanlarındaki büyük harfleri küçültür."""
+    original_df = st.session_state.df_original
+    pending     = st.session_state.pending_edits
+    count = 0
+    for rn in resource_names:
+        rows = original_df[original_df["_resource_name"] == rn]
+        if rows.empty:
+            continue
+        row = rows.iloc[0]
+        changed = False
+        for col in ["E-posta", "2. E-posta"]:
+            cur = pending.get(rn, {}).get(col, _s(row.get(col, "")))
+            new = cur.lower()
+            if new != cur:
+                _mark_bulk_edit(rn, col, new)
+                changed = True
+        if changed:
+            count += 1
+    return count
+
+
 def _apply_bulk_case(resource_names: list, mode: str) -> int:
     """Seçili kişilerin Ad & Soyad alanlarına toplu harf dönüşümü uygular.
     mode: 'title' | 'upper'
@@ -762,8 +784,8 @@ def _render_action_bar(selected_rows: list):
     elif n > 0:
         st.markdown('<div class="action-bar-container">', unsafe_allow_html=True)
         
-        # [Bilgi/İsim, Detay, Aa Title, AA BÜYÜK, TR Düzelt, Etiket Seç, Ata, Kaldır, Sil]
-        cols = st.columns([2, 0.8, 0.8, 0.8, 0.9, 1.5, 0.7, 0.7, 0.8])
+        # [Bilgi/İsim, Detay, Aa Title, AA BÜYÜK, TR Düzelt, @küçük, Etiket Seç, Ata, Kaldır, Sil]
+        cols = st.columns([2, 0.8, 0.8, 0.8, 0.9, 0.8, 1.5, 0.7, 0.7, 0.8])
 
         if n == 1:
             row = selected_rows[0]
@@ -785,13 +807,17 @@ def _render_action_bar(selected_rows: list):
         if cols[4].button("🇹🇷 TR Düzelt", key="bulk_tr_btn", use_container_width=True):
             turkish_fix_dialog(resource_names)
 
+        if cols[5].button("@ küçük", key="bulk_email_lower_btn", use_container_width=True):
+            cnt = _apply_email_lowercase(resource_names)
+            st.toast(f"✅ {cnt} kişinin e-postası küçültüldü.")
+
         group_names = sorted(st.session_state.groups_map_inv.keys())
-        sel_group = cols[5].selectbox(
+        sel_group = cols[6].selectbox(
             "Etiket", ["— Etiket Seç —"] + group_names,
             label_visibility="collapsed", key="bulk_label_sel",
         )
 
-        if cols[6].button("🏷️ Ata", key="bulk_assign_btn", use_container_width=True):
+        if cols[7].button("🏷️ Ata", key="bulk_assign_btn", use_container_width=True):
             if sel_group != "— Etiket Seç —":
                 grn = st.session_state.groups_map_inv.get(sel_group)
                 contacts_api.assign_labels_to_contacts(service, resource_names, grn)
@@ -809,7 +835,7 @@ def _render_action_bar(selected_rows: list):
                 st.session_state.data_version += 1
                 st.rerun()
 
-        if cols[7].button("🗑️ Kaldır", key="bulk_remove_lbl_btn", use_container_width=True):
+        if cols[8].button("🗑️ Kaldır", key="bulk_remove_lbl_btn", use_container_width=True):
             if sel_group != "— Etiket Seç —":
                 grn = st.session_state.groups_map_inv.get(sel_group)
                 contacts_api.remove_label_from_contacts(service, resource_names, grn)
@@ -826,7 +852,7 @@ def _render_action_bar(selected_rows: list):
                 st.session_state.data_version += 1
                 st.rerun()
 
-        if cols[8].button("🗑️ Sil", key="bulk_delete_btn", type="secondary", use_container_width=True):
+        if cols[9].button("🗑️ Sil", key="bulk_delete_btn", type="secondary", use_container_width=True):
             st.session_state.show_delete_confirm = True
             st.session_state.delete_resource_names = resource_names
             st.rerun()
