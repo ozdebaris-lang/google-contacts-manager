@@ -504,10 +504,11 @@ function(p){
     return gb.build()
 
 
-def render_grid(df_display: pd.DataFrame, reload: bool = True):
+def render_grid(df_display: pd.DataFrame, reload: bool = True, grid_key: str = "main_grid"):
     """
     reload=True  → AgGrid veriyi sıfırdan yükler (filter değişimi, kayıt sonrası yenileme)
     reload=False → Grid mevcut state'ini korur; kullanıcı editlerini kaybetmez
+    grid_key     → Sütun listesi değişince key değişir; AgGrid cache'i temizlenir
     """
     grid_options = build_grid_options(df_display)
     response = AgGrid(
@@ -521,7 +522,7 @@ def render_grid(df_display: pd.DataFrame, reload: bool = True):
         height=700,
         allow_unsafe_jscode=True,
         enable_enterprise_modules=False,
-        key="main_grid",
+        key=grid_key,
     )
 
     # Normalise response (dict vs AgGridReturn object)
@@ -1032,7 +1033,8 @@ section[data-testid="stSidebar"] [data-testid="stMultiSelect"] span[data-baseweb
 
     # ── Grid (tam genişlik) ──────────────────────────────────────────────────
     reload_grid = should_reload or force_grid_reload
-    edited_df, grid_selection = render_grid(st.session_state.grid_data, reload=reload_grid)
+    col_key = "_".join(st.session_state.visible_cols)
+    edited_df, grid_selection = render_grid(st.session_state.grid_data, reload=reload_grid, grid_key=f"mg_{col_key}")
 
     # Seçimi kaydet (ekstra rerun olmadan)
     st.session_state.selected_rows = grid_selection
