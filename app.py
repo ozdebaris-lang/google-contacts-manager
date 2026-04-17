@@ -807,7 +807,7 @@ def _render_action_bar(selected_rows: list):
         if cols[4].button("🇹🇷 TR Düzelt", key="bulk_tr_btn", use_container_width=True):
             turkish_fix_dialog(resource_names)
 
-        if cols[5].button("@ küçük", key="bulk_email_lower_btn", use_container_width=True):
+        if cols[5].button("@küçük", key="bulk_email_lower_btn", use_container_width=True, help="E-posta adreslerini küçük harfe çevir"):
             cnt = _apply_email_lowercase(resource_names)
             st.toast(f"✅ {cnt} kişinin e-postası küçültüldü.")
 
