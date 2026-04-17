@@ -432,7 +432,6 @@ def build_grid_options(df: pd.DataFrame):
         "_resource_name", headerName="", width=1, minWidth=1, maxWidth=1,
         editable=False, sortable=False, filter=False, resizable=False,
         suppressMovable=True, cellStyle=invisible_style, cellRenderer=empty_renderer,
-        pinned="right",
     )
     for hidden in ("_etag", "_phones_raw", "_emails_raw", "_addresses_raw", "_primary_phone_col"):
         gb.configure_column(hidden, hide=True)
@@ -984,16 +983,17 @@ section[data-testid="stSidebar"] [data-testid="stMultiSelect"] span[data-baseweb
     # Dahili kolonlar her zaman grid'e gider; display kolonlar build_grid_options'da
     # hide=True ile gizlenir — DataFrame'i kesmek yerine gridOptions kullan.
     # AgGrid Response'u için internal kolonları mutlaka ekle
-    internal_cols = [c for c in [
-        "_resource_name", "_etag",
-        "_phones_raw", "_emails_raw", "_addresses_raw", "_primary_phone_col"
+    # _resource_name en sona — checkbox'ın soluna denk gelmesin
+    other_internal = [c for c in [
+        "_etag", "_phones_raw", "_emails_raw", "_addresses_raw", "_primary_phone_col"
     ] if c in df_view.columns]
+    rn_col = ["_resource_name"] if "_resource_name" in df_view.columns else []
     vis = st.session_state.visible_cols
     display_cols = (
         [c for c in vis if c in df_view.columns] +
         [c for c in DISPLAY_COLS if c not in set(vis) and c in df_view.columns]
     )
-    df_view = df_view[internal_cols + display_cols]
+    df_view = df_view[other_internal + display_cols + rn_col]
 
     # ── Reload kararı: filtre/arama/veri/görünür sütunlar değişince True ──
     grid_state_key = (
