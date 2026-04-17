@@ -425,13 +425,52 @@ def build_grid_options(df: pd.DataFrame):
         wrapText=False,
         autoHeight=False,
     )
-    # _resource_name + dahili kolonlar — gizle
-    gb.configure_column("_resource_name", hide=True)
+    # _resource_name: içeriği gizle ama response'da kalsın
+    invisible_style = JsCode("function(p){return {'color':'transparent','userSelect':'none'}}")
+    empty_renderer = JsCode("function(p){return '';}")
+    gb.configure_column(
+        "_resource_name", headerName="", width=20, minWidth=20, maxWidth=20,
+        editable=False, sortable=False, filter=False, resizable=False,
+        suppressMovable=True, cellStyle=invisible_style, cellRenderer=empty_renderer,
+    )
     for hidden in ("_etag", "_phones_raw", "_emails_raw", "_addresses_raw", "_primary_phone_col"):
         gb.configure_column(hidden, hide=True)
 
     # Oluşturulma: salt okunur
     gb.configure_column("Oluşturulma", editable=False)
+
+    # Primary telefon vurgusu
+    primary_style = JsCode("""
+function(p){
+    if(p.data&&p.data._primary_phone_col===p.colDef.field&&p.value)
+        return{'backgroundColor':'rgba(59,130,246,0.12)','fontWeight':'600','color':'#3b82f6','borderLeft':'3px solid rgba(59,130,246,0.5)'};
+    return null;
+}""")
+    gb.configure_column("Cep Telefonu", cellStyle=primary_style)
+    gb.configure_column("2. Telefon",   cellStyle=primary_style)
+
+    # Etiketler pill renderer
+    pill_renderer = JsCode("""
+(function(){
+    function P(){}
+    P.prototype.init=function(params){
+        var palette=[['#3b82f6','rgba(59,130,246,0.12)'],['#10b981','rgba(16,185,129,0.12)'],['#f59e0b','rgba(245,158,11,0.12)'],['#8b5cf6','rgba(139,92,246,0.12)'],['#ef4444','rgba(239,68,68,0.12)']];
+        this.eGui=document.createElement('div');
+        this.eGui.style.cssText='display:flex;align-items:center;flex-wrap:wrap;gap:3px;height:100%;padding:2px 0;';
+        if(!params.value)return;
+        var self=this;
+        params.value.split(',').map(function(s){return s.trim();}).filter(Boolean).forEach(function(lbl,i){
+            var c=palette[i%palette.length],span=document.createElement('span');
+            span.textContent=lbl;
+            span.style.cssText='background:'+c[1]+';color:'+c[0]+';border:1px solid '+c[0]+'55;border-radius:10px;padding:1px 5px;font-size:0.6rem;font-weight:500;white-space:nowrap;';
+            self.eGui.appendChild(span);
+        });
+    };
+    P.prototype.getGui=function(){return this.eGui;};
+    P.prototype.refresh=function(){return false;};
+    return P;
+})()""")
+    gb.configure_column("Etiketler", cellRenderer=pill_renderer, wrapText=False)
 
     # Kullanıcının gizlediği display kolonlarını hide=True yap
     # (DataFrame'i kesmek yerine gridOptions'da gizlemek grid state'ini korur)
@@ -467,9 +506,18 @@ def render_grid(df_display: pd.DataFrame, reload: bool = True):
     reload=True  → AgGrid veriyi sıfırdan yükler (filter değişimi, kayıt sonrası yenileme)
     reload=False → Grid mevcut state'ini korur; kullanıcı editlerini kaybetmez
     """
+    grid_options = build_grid_options(df_display)
     response = AgGrid(
         df_display,
+        gridOptions=grid_options,
+        update_mode=GridUpdateMode.VALUE_CHANGED | GridUpdateMode.SELECTION_CHANGED,
+        data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
+        fit_columns_on_grid_load=False,
+        reload_data=reload,
+        theme="streamlit",
         height=600,
+        allow_unsafe_jscode=True,
+        enable_enterprise_modules=False,
         key="main_grid",
     )
 
