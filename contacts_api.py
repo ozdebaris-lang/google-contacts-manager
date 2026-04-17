@@ -70,6 +70,16 @@ def assign_labels_to_contacts(service, resource_names: list[str], group_resource
     )
 
 
+def remove_label_from_contacts(service, resource_names: list[str], group_resource_name: str):
+    """Removes all resource_names from the given group."""
+    _execute(
+        service.contactGroups().members().modify(
+            resourceName=group_resource_name,
+            body={"resourceNamesToRemove": resource_names},
+        )
+    )
+
+
 # ─── Fetch ───────────────────────────────────────────────────────────────────
 
 def fetch_all_contacts(service) -> list[dict]:
@@ -529,4 +539,9 @@ def apply_filter(df: pd.DataFrame, filter_name: str) -> pd.DataFrame:
         dup_phones = set(all_phones[all_phones.duplicated(keep=False) & (all_phones != "")].values)
         mask = cep.isin(dup_phones) | tel2.isin(dup_phones)
         return df[mask].reset_index(drop=True)
+    if filter_name == "Birden fazla etiketli":
+        count = df["Etiketler"].str.strip().apply(
+            lambda x: len([l for l in x.split(",") if l.strip()]) if x else 0
+        )
+        return df[count > 1].reset_index(drop=True)
     return df  # "Tümü"

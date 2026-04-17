@@ -324,6 +324,7 @@ def render_sidebar():
             "Şirketi/Ünvanı olmayanlar",
             "Yinelenen isimler",
             "Yinelenen telefonlar",
+            "Birden fazla etiketli",
         ]
         st.session_state.active_filter = st.selectbox(
             "Filtre", filter_options, label_visibility="collapsed",
@@ -755,10 +756,9 @@ def _render_action_bar(selected_rows: list):
     elif n > 0:
         st.markdown('<div class="action-bar-container">', unsafe_allow_html=True)
         
-        # Sabit kolon yapısı: Seçim sayısından bağımsız olarak aynı slotlar kullanılır
-        # [Bilgi/İsim, Detay, Aa Title, AA BÜYÜK, TR Düzelt, Etiket Seç, Uygula, Sil]
-        cols = st.columns([2, 0.8, 0.8, 0.8, 0.9, 1.5, 0.8, 0.8])
-        
+        # [Bilgi/İsim, Detay, Aa Title, AA BÜYÜK, TR Düzelt, Etiket Seç, Ata, Kaldır, Sil]
+        cols = st.columns([2, 0.8, 0.8, 0.8, 0.9, 1.5, 0.7, 0.7, 0.8])
+
         if n == 1:
             row = selected_rows[0]
             full_name = f"{row.get('Ad','')} {row.get('Soyad','')}".strip() or "İsimsiz"
@@ -767,8 +767,7 @@ def _render_action_bar(selected_rows: list):
                 contact_detail_dialog(row["_resource_name"])
         else:
             cols[0].markdown(f"**⚡ {n} Seçili**")
-        
-        # Ortak Aksiyonlar (Her zaman aynı kolonlarda)
+
         if cols[2].button("Aa Title", key="bulk_title_btn", use_container_width=True):
             cnt = _apply_bulk_case(resource_names, "title")
             st.toast(f"✅ {cnt} kişi güncellendi.")
@@ -781,17 +780,47 @@ def _render_action_bar(selected_rows: list):
             turkish_fix_dialog(resource_names)
 
         group_names = sorted(st.session_state.groups_map_inv.keys())
-        sel_group = cols[5].selectbox("Etiket Seç", ["— Etiket Ata —"] + group_names, label_visibility="collapsed", key="bulk_label_sel")
+        sel_group = cols[5].selectbox(
+            "Etiket", ["— Etiket Seç —"] + group_names,
+            label_visibility="collapsed", key="bulk_label_sel",
+        )
 
-        if cols[6].button("🏷️ Uygula", key="bulk_assign_btn", use_container_width=True):
-            if sel_group != "— Etiket Ata —":
+        if cols[6].button("🏷️ Ata", key="bulk_assign_btn", use_container_width=True):
+            if sel_group != "— Etiket Seç —":
                 grn = st.session_state.groups_map_inv.get(sel_group)
                 contacts_api.assign_labels_to_contacts(service, resource_names, grn)
-                st.success(f"Etiketlendi: {sel_group}")
-                load_data(show_spinner=False)
+                # Optimistic update — tüm mevcut etiketleri koru, yenisini ekle
+                for rn in resource_names:
+                    for df_ref in [st.session_state.df, st.session_state.df_original]:
+                        mask = df_ref["_resource_name"] == rn
+                        if mask.any():
+                            cur = str(df_ref.loc[mask, "Etiketler"].iloc[0] or "").strip()
+                            lbls = {l.strip() for l in cur.split(",") if l.strip()}
+                            lbls.add(sel_group)
+                            df_ref.loc[mask, "Etiketler"] = ", ".join(sorted(lbls))
+                st.toast(f"✅ '{sel_group}' etiketi {len(resource_names)} kişiye atandı.")
+                st.session_state.grid_data = None
+                st.session_state.data_version += 1
                 st.rerun()
 
-        if cols[7].button("🗑️ Sil", key="bulk_delete_btn", type="secondary", use_container_width=True):
+        if cols[7].button("🗑️ Kaldır", key="bulk_remove_lbl_btn", use_container_width=True):
+            if sel_group != "— Etiket Seç —":
+                grn = st.session_state.groups_map_inv.get(sel_group)
+                contacts_api.remove_label_from_contacts(service, resource_names, grn)
+                # Optimistic update — etiketi yerel df'den sil
+                for rn in resource_names:
+                    for df_ref in [st.session_state.df, st.session_state.df_original]:
+                        mask = df_ref["_resource_name"] == rn
+                        if mask.any():
+                            cur = str(df_ref.loc[mask, "Etiketler"].iloc[0] or "").strip()
+                            lbls = {l.strip() for l in cur.split(",") if l.strip()} - {sel_group}
+                            df_ref.loc[mask, "Etiketler"] = ", ".join(sorted(lbls))
+                st.toast(f"✅ '{sel_group}' etiketi {len(resource_names)} kişiden kaldırıldı.")
+                st.session_state.grid_data = None
+                st.session_state.data_version += 1
+                st.rerun()
+
+        if cols[8].button("🗑️ Sil", key="bulk_delete_btn", type="secondary", use_container_width=True):
             st.session_state.show_delete_confirm = True
             st.session_state.delete_resource_names = resource_names
             st.rerun()
