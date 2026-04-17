@@ -449,6 +449,9 @@ function(p){
     gb.configure_column("Cep Telefonu", cellStyle=primary_style)
     gb.configure_column("2. Telefon",   cellStyle=primary_style)
 
+    # Ad: checkbox burada — ayrı sütun yok, layout temiz kalır
+    gb.configure_column("Ad", checkboxSelection=True, headerCheckboxSelection=True, width=130)
+
     # Etiketler pill renderer
     pill_renderer = JsCode("""
 (function(){
@@ -486,8 +489,8 @@ function(p){
 
     gb.configure_selection(
         selection_mode="multiple",
-        use_checkbox=True,
-        header_checkbox=True,
+        use_checkbox=False,
+        header_checkbox=False,
         pre_selected_rows=st.session_state.get("selected_rows", []),
     )
     gb.configure_pagination(enabled=False)
@@ -983,17 +986,16 @@ section[data-testid="stSidebar"] [data-testid="stMultiSelect"] span[data-baseweb
     # Dahili kolonlar her zaman grid'e gider; display kolonlar build_grid_options'da
     # hide=True ile gizlenir — DataFrame'i kesmek yerine gridOptions kullan.
     # AgGrid Response'u için internal kolonları mutlaka ekle
-    # _resource_name en sona — checkbox'ın soluna denk gelmesin
-    other_internal = [c for c in [
-        "_etag", "_phones_raw", "_emails_raw", "_addresses_raw", "_primary_phone_col"
+    internal_cols = [c for c in [
+        "_resource_name", "_etag",
+        "_phones_raw", "_emails_raw", "_addresses_raw", "_primary_phone_col"
     ] if c in df_view.columns]
-    rn_col = ["_resource_name"] if "_resource_name" in df_view.columns else []
     vis = st.session_state.visible_cols
     display_cols = (
         [c for c in vis if c in df_view.columns] +
         [c for c in DISPLAY_COLS if c not in set(vis) and c in df_view.columns]
     )
-    df_view = df_view[other_internal + display_cols + rn_col]
+    df_view = df_view[internal_cols + display_cols]
 
     # ── Reload kararı: filtre/arama/veri/görünür sütunlar değişince True ──
     grid_state_key = (
