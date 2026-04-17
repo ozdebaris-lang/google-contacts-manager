@@ -425,13 +425,9 @@ def build_grid_options(df: pd.DataFrame):
         wrapText=False,
         autoHeight=False,
     )
-    # _resource_name: içeriği gizle ama response'da kalsın
-    invisible_style = JsCode("function(p){return {'color':'transparent','userSelect':'none'}}")
-    empty_renderer = JsCode("function(p){return '';}")
+    # _resource_name: gizle (0.3.4'te response'da kalır)
     gb.configure_column(
-        "_resource_name", headerName="", width=20, minWidth=20, maxWidth=20,
-        editable=False, sortable=False, filter=False, resizable=False,
-        suppressMovable=True, cellStyle=invisible_style, cellRenderer=empty_renderer,
+        "_resource_name", hide=True, editable=False,
     )
     for hidden in ("_etag", "_phones_raw", "_emails_raw", "_addresses_raw", "_primary_phone_col"):
         gb.configure_column(hidden, hide=True)
@@ -490,7 +486,7 @@ function(p){
         header_checkbox=True,
         pre_selected_rows=st.session_state.get("selected_rows", []),
     )
-    gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=100)
+    gb.configure_pagination(paginationAutoPageSize=True)
     gb.configure_grid_options(
         domLayout="normal",
         suppressRowClickSelection=False,
@@ -823,7 +819,8 @@ def main():
     st.markdown("""
 <style>
 /* ── Streamlit üst bar (Deploy / Settings menüsü) gizle ── */
-header[data-testid="stHeader"] { display: none !important; }
+/* Streamlit deploy/settings toolbar'ı gizle ama sidebar toggle'ı bırak */
+header[data-testid="stHeader"] [data-testid="stToolbar"] { display: none !important; }
 .block-container { padding-top: 0.6rem !important; }
 
 /* Aksiyon Barı Konteynırı */
@@ -891,7 +888,7 @@ hr { margin: 0.5rem 0 !important; opacity: 0.35 !important; }
 /* ════════════════════════════════════════════════════
    SIDEBAR
    ════════════════════════════════════════════════════ */
-section[data-testid="stSidebar"] { min-width:200px !important; max-width:220px !important; }
+section[data-testid="stSidebar"] { max-width:220px !important; }
 section[data-testid="stSidebar"] .block-container { padding:0.5rem 0.6rem !important; }
 
 /* Tüm sidebar yazıları küçük punto */
