@@ -3,8 +3,11 @@ Google Contacts Manager — Vibe Edition
 Streamlit + st-aggrid frontend for the Google People API.
 """
 
+import csv
+import io
 import json
 import os
+import urllib.request
 from datetime import datetime
 
 import pandas as pd
@@ -255,17 +258,102 @@ def new_contact_dialog():
             st.error("En az bir ad veya soyad gir.")
 
 
-# ─── Türkçe karakter düzeltme dialog ─────────────────────────────────────────
+# ─── Türkçe karakter düzeltme ─────────────────────────────────────────────────
 
 _TR_CHARS = set("şğçöüıŞĞÇÖÜİ")
 
+# Soyadlar için hardcoded fallback sözlüğü (anahtar: ascii-normalize edilmiş küçük harf)
+_TR_SURNAMES: dict[str, str] = {
+    "ozturk": "Öztürk", "ozdemir": "Özdemir", "ozkul": "Özkul", "ozay": "Özay",
+    "ozyurt": "Özyurt", "ozyilmaz": "Özyılmaz", "ozmen": "Özmen", "ozer": "Özer",
+    "yilmaz": "Yılmaz", "yildiz": "Yıldız", "yildirim": "Yıldırım",
+    "simsek": "Şimşek", "sahin": "Şahin",
+    "celik": "Çelik", "cetin": "Çetin", "cakmak": "Çakmak", "cinar": "Çınar",
+    "coban": "Çoban", "coskun": "Coşkun",
+    "kose": "Köse", "kocer": "Köçer", "koroglu": "Köroğlu", "kucuk": "Küçük",
+    "gumus": "Gümüş", "gul": "Gül", "guler": "Güler", "gunduz": "Gündüz",
+    "gunay": "Günay", "gurel": "Gürel",
+    "dagci": "Dağcı", "karadag": "Karadağ", "karakus": "Karakuş",
+    "sarac": "Saraç", "ates": "Ateş", "atas": "Ataş", "erdas": "Erdaş",
+    "avci": "Avcı", "topcu": "Topçu",
+    "ucar": "Uçar", "unlu": "Ünlü", "unsal": "Ünsal",
+    "akturk": "Aktürk", "turk": "Türk", "turker": "Türker",
+    "yuce": "Yüce", "tas": "Taş", "tasci": "Taşcı", "sari": "Sarı",
+    "erdogan": "Erdoğan", "dogan": "Doğan", "aydin": "Aydın",
+}
 
-@st.dialog("🇹🇷 Türkçe Karakter Düzeltme", width="large")
+_TR_NAMES_CACHE_PATH = os.path.join(os.path.dirname(__file__), "data", "tr_names_cache.json")
+_TR_NAMES_DICT: dict[str, str] | None = None   # oturum boyunca bellekte tutulur
+
+
+def _ascii_key(s: str) -> str:
+    """Türkçe harfleri ASCII'ye indir + küçük harf — sözlük araması için.
+    Not: İ.lower() Python'da 'i\u0307' üretir, bu yüzden önce replace yapılır."""
+    s = s.replace("İ", "i")          # büyük İ → küçük i (lower()'dan önce)
+    return (s.lower()
+            .replace("ö", "o").replace("ü", "u").replace("ş", "s")
+            .replace("ğ", "g").replace("ç", "c").replace("ı", "i"))
+
+
+def _get_tr_names() -> dict[str, str]:
+    """Cache dosyasını + hardcoded soyadları birleştirerek döndür."""
+    global _TR_NAMES_DICT
+    if _TR_NAMES_DICT is not None:
+        return _TR_NAMES_DICT
+    merged = dict(_TR_SURNAMES)
+    if os.path.exists(_TR_NAMES_CACHE_PATH):
+        try:
+            with open(_TR_NAMES_CACHE_PATH, encoding="utf-8") as f:
+                merged.update(json.load(f))
+        except Exception:
+            pass
+    _TR_NAMES_DICT = merged
+    return merged
+
+
+def _download_tr_names() -> int:
+    """Gist'ten ~9.700 Türkçe ismi indir, Türkçe char içerenleri cache'e kaydet."""
+    global _TR_NAMES_DICT
+    url = "https://gist.githubusercontent.com/kvtoraman/f300ae077828c6940d96cd3b19181b3f/raw"
+    with urllib.request.urlopen(url, timeout=15) as r:
+        content = r.read().decode("utf-8")
+    mapping: dict[str, str] = {}
+    for row in csv.DictReader(io.StringIO(content)):
+        name = row.get("name", "").strip()
+        if name and any(c in _TR_CHARS for c in name) and " " not in name:
+            key = _ascii_key(name)
+            if key not in mapping:
+                mapping[key] = name
+    os.makedirs(os.path.dirname(_TR_NAMES_CACHE_PATH), exist_ok=True)
+    with open(_TR_NAMES_CACHE_PATH, "w", encoding="utf-8") as f:
+        json.dump(mapping, f, ensure_ascii=False)
+    _TR_NAMES_DICT = {**mapping, **_TR_SURNAMES}
+    return len(mapping)
+
+
+def _suggest_tr(phrase: str) -> str:
+    """Her kelime için sözlükten Türkçe öneri döndür; bilinmeyeni olduğu gibi bırak."""
+    if not phrase.strip():
+        return phrase
+    names = _get_tr_names()
+    return " ".join(names.get(_ascii_key(w), w) for w in phrase.split())
+
+
+@st.dialog("🇹🇷 Türkçe Karakter Önerileri", width="large")
 def turkish_fix_dialog(resource_names: list):
-    """Türkçe karakter içermeyen isimleri listeler; kullanıcı düzeltir."""
+    # İsim veritabanı yoksa otomatik indir
+    if not os.path.exists(_TR_NAMES_CACHE_PATH):
+        with st.spinner("İsim veritabanı indiriliyor (ilk açılış, ~2 sn)…"):
+            try:
+                n = _download_tr_names()
+                st.toast(f"✅ {n} Türkçe isim yüklendi.", icon="🇹🇷")
+            except Exception as e:
+                st.warning(f"Veritabanı indirilemedi, sınırlı öneri kullanılıyor. ({e})")
+
     original_df = st.session_state.df_original
     pending     = st.session_state.pending_edits
 
+    # Her kişi için: (rn, cur_ad, cur_soyad, sug_ad, sug_soyad, orig_ad, orig_soyad)
     to_fix = []
     for rn in resource_names:
         rows = original_df[original_df["_resource_name"] == rn]
@@ -276,28 +364,85 @@ def turkish_fix_dialog(resource_names: list):
         cur_soyad = pending.get(rn, {}).get("Soyad", _s(row.get("Soyad", "")))
         full = cur_ad + cur_soyad
         if full.strip() and not any(c in _TR_CHARS for c in full):
-            to_fix.append((rn, cur_ad, cur_soyad,
+            sug_ad    = _suggest_tr(cur_ad)
+            sug_soyad = _suggest_tr(cur_soyad)
+            to_fix.append((rn, cur_ad, cur_soyad, sug_ad, sug_soyad,
                            _s(row.get("Ad", "")), _s(row.get("Soyad", ""))))
 
     if not to_fix:
-        st.success("Seçili kişilerin tümünde zaten Türkçe karakter var, düzeltme gerekmiyor.")
+        st.success("Seçili kişilerin tümünde zaten Türkçe karakter var.")
         return
 
+    n_with_sug = sum(1 for _, a, b, sa, sb, *_ in to_fix if sa != a or sb != b)
+    n_total    = len(to_fix)
     st.caption(
-        f"Türkçe karakter **içermeyen** {len(to_fix)} kişi listelendi. "
-        "Düzeltmek istediğiniz isimleri yazın, değiştirmek istemediklerinizi olduğu gibi bırakın."
+        f"**{n_total}** kişi incelendi — **{n_with_sug}** kişi için otomatik öneri bulundu, "
+        f"geri kalanlar için manuel giriş yapabilirsiniz."
     )
     st.divider()
 
-    edits = {}
-    for rn, cur_ad, cur_soyad, orig_ad, orig_soyad in to_fix:
-        c1, c2 = st.columns(2)
-        new_ad    = c1.text_input("Ad",    value=cur_ad,    key=f"trfix_ad_{rn}")
-        new_soyad = c2.text_input("Soyad", value=cur_soyad, key=f"trfix_sy_{rn}")
-        edits[rn] = (new_ad, new_soyad, orig_ad, orig_soyad)
+    edits = {}  # {rn: (final_ad, final_soyad, orig_ad, orig_soyad)}
+
+    for rn, cur_ad, cur_soyad, sug_ad, sug_soyad, orig_ad, orig_soyad in to_fix:
+        ad_has_sug    = sug_ad    != cur_ad
+        soyad_has_sug = sug_soyad != cur_soyad
+
+        with st.container(border=True):
+            # Başlık: orijinal → öneri özeti
+            if ad_has_sug or soyad_has_sug:
+                full_sug = f"{sug_ad} {sug_soyad}".strip()
+                st.markdown(
+                    f"**{cur_ad} {cur_soyad}** &nbsp;"
+                    f'<span style="color:#6366f1;font-size:0.8rem;">→ {full_sug}</span>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(
+                    f"**{cur_ad} {cur_soyad}** &nbsp;"
+                    f'<span style="color:#94a3b8;font-size:0.75rem;">öneri bulunamadı</span>',
+                    unsafe_allow_html=True,
+                )
+
+            c1, c2 = st.columns(2)
+
+            # ── Ad ────────────────────────────────────────────────────────────
+            with c1:
+                if ad_has_sug:
+                    accept = st.checkbox(
+                        f'Ad: **{cur_ad}** → **{sug_ad}**',
+                        value=True, key=f"tr_acc_ad_{rn}",
+                    )
+                    if accept:
+                        final_ad = sug_ad
+                    else:
+                        final_ad = st.text_input(
+                            "Ad (düzenle)", value=cur_ad,
+                            key=f"tr_man_ad_{rn}", label_visibility="collapsed",
+                        )
+                else:
+                    final_ad = st.text_input("Ad", value=cur_ad, key=f"tr_man_ad_{rn}")
+
+            # ── Soyad ─────────────────────────────────────────────────────────
+            with c2:
+                if soyad_has_sug:
+                    accept_s = st.checkbox(
+                        f'Soyad: **{cur_soyad}** → **{sug_soyad}**',
+                        value=True, key=f"tr_acc_sy_{rn}",
+                    )
+                    if accept_s:
+                        final_soyad = sug_soyad
+                    else:
+                        final_soyad = st.text_input(
+                            "Soyad (düzenle)", value=cur_soyad,
+                            key=f"tr_man_sy_{rn}", label_visibility="collapsed",
+                        )
+                else:
+                    final_soyad = st.text_input("Soyad", value=cur_soyad, key=f"tr_man_sy_{rn}")
+
+            edits[rn] = (final_ad, final_soyad, orig_ad, orig_soyad)
 
     st.divider()
-    if st.button("✅ Uygula", type="primary", use_container_width=True):
+    if st.button("✅ Seçilenleri Uygula", type="primary", use_container_width=True):
         count = 0
         for rn, (new_ad, new_soyad, orig_ad, orig_soyad) in edits.items():
             if new_ad != orig_ad:
@@ -306,7 +451,10 @@ def turkish_fix_dialog(resource_names: list):
             if new_soyad != orig_soyad:
                 _mark_bulk_edit(rn, "Soyad", new_soyad)
                 count += 1
-        st.success(f"✅ {count} alan güncellendi. Kaydetmek için 💾 Değişiklikleri Kaydet butonuna basın.")
+        if count:
+            st.success(f"✅ {count} alan güncellendi. Kaydetmek için 💾 butonuna basın.")
+        else:
+            st.info("Değiştirilecek alan bulunamadı.")
         st.rerun()
 
 
@@ -457,7 +605,8 @@ function(p){
     gb.configure_column("2. Telefon",   cellStyle=primary_style)
 
     # Ad: checkbox burada — ayrı sütun yok, layout temiz kalır
-    gb.configure_column("Ad", checkboxSelection=True, headerCheckboxSelection=True, width=130)
+    gb.configure_column("Ad", checkboxSelection=True, headerCheckboxSelection=True,
+                        headerCheckboxSelectionFilteredOnly=True, width=130)
 
     # Etiketler pill renderer
     pill_renderer = JsCode("""
@@ -745,10 +894,9 @@ def save_changes():
 # ─── Üst Aksiyon Çubuğu ───────────────────────────────────────────────────────
 
 def _render_action_bar(selected_rows: list):
-    """Grid üstünde ince yatay çubuk — seçim yoksa hiçbir şey göstermez."""
+    """Grid üstünde araç çubuğu — seçim yoksa hiçbir şey göstermez."""
     n = len(selected_rows)
 
-    # Silme onayı aktifken, seçim kaybı olsa bile saklanan resource_names'i kullan
     if n == 0:
         if not (st.session_state.show_delete_confirm and st.session_state.get("delete_resource_names")):
             st.session_state.show_delete_confirm = False
@@ -757,19 +905,30 @@ def _render_action_bar(selected_rows: list):
     service = st.session_state.service
     resource_names = [r["_resource_name"] for r in selected_rows if r.get("_resource_name")]
 
-    # ── 1. Durum: Silme Onayı (Grid'in kaybolmaması için return kaldırıldı) ──
+    # ── Silme Onayı ────────────────────────────────────────────────────────────
     if st.session_state.show_delete_confirm:
-        # Seçim kaybı durumuna karşı kayıtlı listeyi kullan
         confirm_rns = st.session_state.get("delete_resource_names") or resource_names
-        with st.container(border=True):
-            st.warning(f"⚠️ **{len(confirm_rns)}** kişi kalıcı olarak silinecek. Bu işlem geri alınamaz!")
-            dc1, dc2, dc3 = st.columns([4, 1, 1])
-            if dc2.button("🗑️ Evet, Sil", key="confirm_delete", type="primary", use_container_width=True):
+        st.markdown(
+            f'<div class="delete-confirm-bar">'
+            f'  <span class="dcb-icon">🗑️</span>'
+            f'  <div class="dcb-body">'
+            f'    <span class="dcb-title">Silme Onayı</span>'
+            f'    <span class="dcb-desc"><b>{len(confirm_rns)}</b> kişi kalıcı olarak silinecek '
+            f'— bu işlem geri alınamaz.</span>'
+            f'  </div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+        _, btn_yes, btn_no = st.columns([6.5, 1.3, 0.9])
+        with btn_yes:
+            if st.button("🗑️ Onayla", key="confirm_delete", type="primary", use_container_width=True):
                 try:
                     contacts_api.backup_csv(st.session_state.df)
                     with st.spinner("Siliniyor..."):
                         contacts_api.delete_contacts(service, confirm_rns)
-                    st.session_state.df = st.session_state.df[~st.session_state.df["_resource_name"].isin(confirm_rns)]
+                    st.session_state.df = st.session_state.df[
+                        ~st.session_state.df["_resource_name"].isin(confirm_rns)
+                    ]
                     st.session_state.selected_rows = []
                     st.session_state.show_delete_confirm = False
                     st.session_state.delete_resource_names = []
@@ -779,94 +938,125 @@ def _render_action_bar(selected_rows: list):
                     st.rerun()
                 except Exception as e:
                     st.error(f"Hata oluştu: {e}")
-            if dc3.button("Vazgeç", key="cancel_delete", use_container_width=True):
+        with btn_no:
+            if st.button("Vazgeç", key="cancel_delete", use_container_width=True):
                 st.session_state.show_delete_confirm = False
                 st.session_state.delete_resource_names = []
                 st.rerun()
+        return
 
-    # ── 2. Durum: Normal Aksiyon Barı (Onay varken gizle ama grid'i öldürme) ──
-    elif n > 0:
-        st.markdown('<div class="action-bar-container">', unsafe_allow_html=True)
-        
-        # [Bilgi/İsim, Detay, Aa Title, AA BÜYÜK, TR Düzelt, @küçük, Etiket Seç, Ata, Kaldır, Sil]
-        cols = st.columns([2, 0.8, 0.8, 0.8, 0.9, 0.8, 1.5, 0.7, 0.7, 0.8])
+    # ── Normal Araç Çubuğu ─────────────────────────────────────────────────────
+    if n == 0:
+        return
 
-        if n == 1:
-            row = selected_rows[0]
-            full_name = f"{row.get('Ad','')} {row.get('Soyad','')}".strip() or "İsimsiz"
-            cols[0].markdown(f"**👤 {full_name}**")
-            if cols[1].button("🔍 Detay", key="act_det", use_container_width=True):
-                contact_detail_dialog(row["_resource_name"])
-        else:
-            cols[0].markdown(f"**⚡ {n} Seçili**")
+    group_names = sorted(st.session_state.groups_map_inv.keys())
 
-        if cols[2].button("Aa Title", key="bulk_title_btn", use_container_width=True):
-            cnt = _apply_bulk_case(resource_names, "title")
-            st.toast(f"✅ {cnt} kişi güncellendi.")
+    st.markdown('<div class="tb-start"></div>', unsafe_allow_html=True)
 
-        if cols[3].button("AA BÜYÜK", key="bulk_upper_btn", use_container_width=True):
-            cnt = _apply_bulk_case(resource_names, "upper")
-            st.toast(f"✅ {cnt} kişi güncellendi.")
+    # Sabit sütun düzeni:
+    # kimlik | detay | vsep | Aa | AA | 🇹🇷 | @↓ | vsep | label_sel | Ata | Kaldır | vsep | Sil
+    (c_id, c_det, c_v1,
+     c_aa, c_AA, c_tr, c_at,
+     c_v2,
+     c_lbl, c_ata, c_kldr,
+     c_v3,
+     c_sil) = st.columns([1.85, 0.62, 0.07, 0.58, 0.58, 0.58, 0.58, 0.07, 2.0, 0.65, 0.65, 0.07, 0.72])
 
-        if cols[4].button("🇹🇷 TR Düzelt", key="bulk_tr_btn", use_container_width=True):
-            turkish_fix_dialog(resource_names)
-
-        if cols[5].button("@küçük", key="bulk_email_lower_btn", use_container_width=True, help="E-posta adreslerini küçük harfe çevir"):
-            cnt = _apply_email_lowercase(resource_names)
-            if cnt:
-                st.toast(f"✅ {cnt} kişinin e-postası küçültüldü.")
-                st.session_state.grid_data = None
-                st.session_state.data_version += 1
-                st.rerun()
-            else:
-                st.toast("E-postalarda büyük harf bulunamadı.")
-
-        group_names = sorted(st.session_state.groups_map_inv.keys())
-        sel_group = cols[6].selectbox(
-            "Etiket", ["— Etiket Seç —"] + group_names,
-            label_visibility="collapsed", key="bulk_label_sel",
+    # ── Kimlik bölümü ─────────────────────────────────────────────────────────
+    if n == 1:
+        row = selected_rows[0]
+        full_name = f"{row.get('Ad', '')} {row.get('Soyad', '')}".strip() or "İsimsiz"
+        c_id.markdown(
+            f'<div class="tb-name">👤 {full_name}</div>',
+            unsafe_allow_html=True,
+        )
+        if c_det.button("Detay", key="act_det", use_container_width=True, help="Kişi detaylarını görüntüle"):
+            contact_detail_dialog(row["_resource_name"])
+    else:
+        c_id.markdown(
+            f'<div class="tb-badge">⚡ {n} seçili</div>',
+            unsafe_allow_html=True,
         )
 
-        if cols[7].button("🏷️ Ata", key="bulk_assign_btn", use_container_width=True):
-            if sel_group != "— Etiket Seç —":
-                grn = st.session_state.groups_map_inv.get(sel_group)
-                contacts_api.assign_labels_to_contacts(service, resource_names, grn)
-                # Optimistic update — tüm mevcut etiketleri koru, yenisini ekle
-                for rn in resource_names:
-                    for df_ref in [st.session_state.df, st.session_state.df_original]:
-                        mask = df_ref["_resource_name"] == rn
-                        if mask.any():
-                            cur = str(df_ref.loc[mask, "Etiketler"].iloc[0] or "").strip()
-                            lbls = {l.strip() for l in cur.split(",") if l.strip()}
-                            lbls.add(sel_group)
-                            df_ref.loc[mask, "Etiketler"] = ", ".join(sorted(lbls))
-                st.toast(f"✅ '{sel_group}' etiketi {len(resource_names)} kişiye atandı.")
-                st.session_state.grid_data = None
-                st.session_state.data_version += 1
-                st.rerun()
+    # ── Dikey ayraçlar ────────────────────────────────────────────────────────
+    c_v1.markdown('<div class="vsep"></div>', unsafe_allow_html=True)
+    c_v2.markdown('<div class="vsep"></div>', unsafe_allow_html=True)
+    c_v3.markdown('<div class="vsep"></div>', unsafe_allow_html=True)
 
-        if cols[8].button("🗑️ Kaldır", key="bulk_remove_lbl_btn", use_container_width=True):
-            if sel_group != "— Etiket Seç —":
-                grn = st.session_state.groups_map_inv.get(sel_group)
-                contacts_api.remove_label_from_contacts(service, resource_names, grn)
-                # Optimistic update — etiketi yerel df'den sil
-                for rn in resource_names:
-                    for df_ref in [st.session_state.df, st.session_state.df_original]:
-                        mask = df_ref["_resource_name"] == rn
-                        if mask.any():
-                            cur = str(df_ref.loc[mask, "Etiketler"].iloc[0] or "").strip()
-                            lbls = {l.strip() for l in cur.split(",") if l.strip()} - {sel_group}
-                            df_ref.loc[mask, "Etiketler"] = ", ".join(sorted(lbls))
-                st.toast(f"✅ '{sel_group}' etiketi {len(resource_names)} kişiden kaldırıldı.")
-                st.session_state.grid_data = None
-                st.session_state.data_version += 1
-                st.rerun()
+    # ── Metin işlemleri ───────────────────────────────────────────────────────
+    if c_aa.button("Aa", key="bulk_title_btn", use_container_width=True,
+                   help="Title Case — Her kelimenin ilk harfini büyüt"):
+        cnt = _apply_bulk_case(resource_names, "title")
+        st.toast(f"✅ {cnt} kişi güncellendi.")
 
-        if cols[9].button("🗑️ Sil", key="bulk_delete_btn", type="secondary", use_container_width=True):
+    if c_AA.button("AA", key="bulk_upper_btn", use_container_width=True,
+                   help="BÜYÜK HARF — Tümünü büyük harfe çevir"):
+        cnt = _apply_bulk_case(resource_names, "upper")
+        st.toast(f"✅ {cnt} kişi güncellendi.")
+
+    if c_tr.button("🇹🇷", key="bulk_tr_btn", use_container_width=True,
+                   help="Türkçe karakter düzelt"):
+        turkish_fix_dialog(resource_names)
+
+    if c_at.button("@↓", key="bulk_email_lower_btn", use_container_width=True,
+                   help="E-posta adreslerini küçük harfe çevir"):
+        cnt = _apply_email_lowercase(resource_names)
+        if cnt:
+            st.toast(f"✅ {cnt} kişinin e-postası küçültüldü.")
+            st.session_state.grid_data = None
+            st.session_state.data_version += 1
+            st.rerun()
+        else:
+            st.toast("E-postalarda büyük harf bulunamadı.")
+
+    # ── Etiket işlemleri ──────────────────────────────────────────────────────
+    sel_group = c_lbl.selectbox(
+        "Etiket", ["— Etiket Seç —"] + group_names,
+        label_visibility="collapsed", key="bulk_label_sel",
+    )
+
+    if c_ata.button("Ata", key="bulk_assign_btn", use_container_width=True,
+                    help="Seçili etiketi kişilere ata"):
+        if sel_group != "— Etiket Seç —":
+            grn = st.session_state.groups_map_inv.get(sel_group)
+            contacts_api.assign_labels_to_contacts(service, resource_names, grn)
+            for rn in resource_names:
+                for df_ref in [st.session_state.df, st.session_state.df_original]:
+                    mask = df_ref["_resource_name"] == rn
+                    if mask.any():
+                        cur = str(df_ref.loc[mask, "Etiketler"].iloc[0] or "").strip()
+                        lbls = {l.strip() for l in cur.split(",") if l.strip()}
+                        lbls.add(sel_group)
+                        df_ref.loc[mask, "Etiketler"] = ", ".join(sorted(lbls))
+            st.toast(f"✅ '{sel_group}' etiketi {len(resource_names)} kişiye atandı.")
+            st.session_state.grid_data = None
+            st.session_state.data_version += 1
+            st.rerun()
+
+    if c_kldr.button("Kaldır", key="bulk_remove_lbl_btn", use_container_width=True,
+                     help="Seçili etiketi kişilerden kaldır"):
+        if sel_group != "— Etiket Seç —":
+            grn = st.session_state.groups_map_inv.get(sel_group)
+            contacts_api.remove_label_from_contacts(service, resource_names, grn)
+            for rn in resource_names:
+                for df_ref in [st.session_state.df, st.session_state.df_original]:
+                    mask = df_ref["_resource_name"] == rn
+                    if mask.any():
+                        cur = str(df_ref.loc[mask, "Etiketler"].iloc[0] or "").strip()
+                        lbls = {l.strip() for l in cur.split(",") if l.strip()} - {sel_group}
+                        df_ref.loc[mask, "Etiketler"] = ", ".join(sorted(lbls))
+            st.toast(f"✅ '{sel_group}' etiketi {len(resource_names)} kişiden kaldırıldı.")
+            st.session_state.grid_data = None
+            st.session_state.data_version += 1
+            st.rerun()
+
+    # ── Sil butonu ────────────────────────────────────────────────────────────
+    with c_sil:
+        st.markdown('<span class="danger-anchor"></span>', unsafe_allow_html=True)
+        if st.button("🗑️ Sil", key="bulk_delete_btn", use_container_width=True):
             st.session_state.show_delete_confirm = True
             st.session_state.delete_resource_names = resource_names
             st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
 
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
@@ -893,39 +1083,167 @@ def main():
 header[data-testid="stHeader"] { display: none !important; }
 .block-container { padding-top: 0.5rem !important; }
 
-/* Aksiyon Barı Konteynırı */
-.action-bar-container {
-    background-color: #f8fafc;
-    padding: 10px;
-    border-radius: 12px;
-    border: 1px solid #e2e8f0;
-    margin-bottom: 15px;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+/* ════════════════════════════════════════════════════
+   ARAÇ ÇUBUĞU — grid başlık satırı görünümü
+   tb-start işaretçisinin hemen sonraki kardeş .element-container'ı hedef alır
+   ════════════════════════════════════════════════════ */
+
+/* İşaretçi: görünmez, sadece CSS sibling targeting için */
+.tb-start { display: none; }
+
+/* Kolon satırını grid başlığı gibi göster */
+.element-container:has(.tb-start) + .element-container {
+    background: #f0f2f6 !important;
+    border-top: 1px solid rgba(49,51,63,0.2) !important;
+    border-left: 1px solid rgba(49,51,63,0.2) !important;
+    border-right: 1px solid rgba(49,51,63,0.2) !important;
+    border-bottom: 2px solid rgba(49,51,63,0.28) !important;
+    border-radius: 6px 6px 0 0 !important;
+    padding: 1px 6px 2px 6px !important;
+    margin-bottom: -1px !important;
 }
 
-/* Sil Butonu Özel - Kırmızı Vurgu */
-button[key="bulk_delete_btn"] {
-    background-color: #fee2e2 !important;
+/* Toolbar içindeki tüm butonlar: grid başlık stilinde, çok kompakt */
+.element-container:has(.tb-start) + .element-container .stButton > button {
+    font-size: 0.6rem !important;
+    padding: 1px 6px !important;
+    height: 22px !important;
+    min-height: 22px !important;
+    border-radius: 4px !important;
+    box-shadow: none !important;
+    background: rgba(255,255,255,0.75) !important;
+    color: #374151 !important;
+    border: 1px solid rgba(49,51,63,0.12) !important;
+    font-weight: 500 !important;
+    transform: none !important;
+    transition: background 0.1s ease, border-color 0.1s ease !important;
+}
+.element-container:has(.tb-start) + .element-container .stButton > button:hover {
+    background: #ffffff !important;
+    border-color: rgba(49,51,63,0.28) !important;
+    transform: none !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1) !important;
+}
+.element-container:has(.tb-start) + .element-container .stButton > button:active {
+    background: #e8eaf0 !important;
+    transform: none !important;
+}
+
+/* Selectbox toolbar içinde kompakt */
+.element-container:has(.tb-start) + .element-container .stSelectbox > div {
+    margin-bottom: 0 !important;
+}
+.element-container:has(.tb-start) + .element-container [data-baseweb="select"] {
+    font-size: 0.6rem !important;
+    min-height: 22px !important;
+}
+.element-container:has(.tb-start) + .element-container [data-baseweb="select"] > div {
+    min-height: 22px !important;
+    padding: 0 6px !important;
+    font-size: 0.6rem !important;
+}
+
+/* Kimlik etiketi */
+.tb-name {
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: #1e293b;
+    line-height: 2.0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Çoklu seçim rozeti */
+.tb-badge {
+    display: inline-flex;
+    align-items: center;
+    background: #6366f1;
+    color: white;
+    border-radius: 10px;
+    padding: 2px 9px;
+    font-size: 0.6rem;
+    font-weight: 600;
+    margin-top: 4px;
+    letter-spacing: 0.02em;
+}
+
+/* Dikey ayraç */
+.vsep {
+    border-left: 1px solid rgba(49,51,63,0.15);
+    height: 20px;
+    width: 1px;
+    margin: 4px auto 0 auto;
+}
+
+/* ─── Sil butonu tehlike stili ─── */
+[data-testid="column"]:has(.danger-anchor) .stButton > button {
+    background-color: #fff1f1 !important;
     color: #dc2626 !important;
-    border: 1px solid #fecaca !important;
+    border: 1px solid #fca5a5 !important;
+    font-weight: 600 !important;
+}
+[data-testid="column"]:has(.danger-anchor) .stButton > button:hover {
+    background-color: #dc2626 !important;
+    color: #ffffff !important;
+    border-color: #dc2626 !important;
+    box-shadow: none !important;
+}
+
+/* ════════════════════════════════════════════════════
+   SİLME ONAY BANDI — kırmızı tintli grid başlık satırı
+   ════════════════════════════════════════════════════ */
+.delete-confirm-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #fff1f2;
+    border-top: 1px solid #fecdd3;
+    border-left: 1px solid #fecdd3;
+    border-right: 1px solid #fecdd3;
+    border-bottom: 2px solid #fca5a5;
+    border-left-width: 3px;
+    border-left-color: #ef4444;
+    border-radius: 6px 6px 0 0;
+    padding: 5px 10px;
+    margin-bottom: -1px;
+}
+.dcb-icon { font-size: 0.95rem; flex-shrink: 0; }
+.dcb-body { display: flex; flex-direction: column; gap: 0; }
+.dcb-title {
+    font-size: 0.62rem;
+    font-weight: 700;
+    color: #991b1b;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    line-height: 1.3;
+}
+.dcb-desc { font-size: 0.68rem; color: #b91c1c; line-height: 1.4; }
+
+/* Silme onayı buton satırı da grid-like */
+.element-container:has(.delete-confirm-bar) + .element-container {
+    background: #fff5f5 !important;
+    border-left: 1px solid #fecdd3 !important;
+    border-right: 1px solid #fecdd3 !important;
+    border-bottom: 1px solid #fecdd3 !important;
+    padding: 2px 6px !important;
+    margin-bottom: 0 !important;
 }
 
 /* ════════════════════════════════════════════════════
    MODERN UI — butonlar, inputlar, geçişler
    ════════════════════════════════════════════════════ */
-
-/* ── Tüm butonlar: yuvarlak köşe + hover animasyonu ── */
 .stButton > button {
-    border-radius: 8px !important;
+    border-radius: 7px !important;
     font-size: 0.68rem !important;
     font-weight: 500 !important;
     padding: 0.2rem 0.5rem !important;
     transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease !important;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.08) !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.07) !important;
 }
 .stButton > button:hover {
     transform: translateY(-1px) !important;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.13) !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.12) !important;
 }
 .stButton > button:active {
     transform: translateY(0) !important;
@@ -935,16 +1253,16 @@ button[key="bulk_delete_btn"] {
 /* ── Input / selectbox ── */
 .stTextInput > div > div > input,
 .stSelectbox > div > div > div {
-    border-radius: 8px !important;
+    border-radius: 7px !important;
     transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
 }
 .stTextInput > div > div > input:focus {
-    box-shadow: 0 0 0 2px rgba(99,102,241,0.25) !important;
+    box-shadow: 0 0 0 2px rgba(99,102,241,0.22) !important;
 }
 
 /* ── Download butonu ── */
 .stDownloadButton > button {
-    border-radius: 8px !important;
+    border-radius: 7px !important;
     transition: transform 0.12s ease, box-shadow 0.12s ease !important;
 }
 .stDownloadButton > button:hover {
@@ -961,7 +1279,6 @@ hr { margin: 0.5rem 0 !important; opacity: 0.35 !important; }
 section[data-testid="stSidebar"] { max-width:220px !important; }
 section[data-testid="stSidebar"] .block-container { padding:0.5rem 0.6rem !important; }
 
-/* Tüm sidebar yazıları küçük punto */
 section[data-testid="stSidebar"],
 section[data-testid="stSidebar"] p,
 section[data-testid="stSidebar"] span,
@@ -1010,11 +1327,6 @@ section[data-testid="stSidebar"] [data-testid="stMultiSelect"] span[data-baseweb
 
     # ── Header satırı: başlık + kaydet + yeni kişi ──────────────────────────
     n_pending_hdr = len(st.session_state.pending_edits)
-    badge_txt = (
-        f' <span style="font-size:0.75rem;color:#b45309;font-weight:600;vertical-align:middle;">'
-        f'⚡ {n_pending_hdr} bekliyor</span>'
-        if n_pending_hdr else ""
-    )
     # ── Apply filter + search ────────────────────────────────────────────────
     df_view = contacts_api.apply_filter(
         st.session_state.df, st.session_state.active_filter
@@ -1034,17 +1346,27 @@ section[data-testid="stSidebar"] [data-testid="stMultiSelect"] span[data-baseweb
     if query:
         badge_count += f' | Arama: *"{query}"*'
 
-    hcol1, hcol2, hcol3 = st.columns([6, 1.4, 0.9])
+    hcol1, hcol2, hcol3 = st.columns([6, 1.5, 0.85])
     with hcol1:
+        pending_pill = (
+            f'<span style="display:inline-flex;align-items:center;background:#fef3c7;color:#92400e;'
+            f'border:1px solid #fcd34d;border-radius:20px;padding:1px 9px;font-size:0.65rem;'
+            f'font-weight:700;margin-left:8px;vertical-align:middle;">⚡ {n_pending_hdr} bekliyor</span>'
+            if n_pending_hdr else ""
+        )
         st.markdown(
-            f'<span style="font-size:1.15rem;font-weight:700;line-height:2;">📇 Google Contacts Manager</span>'
-            f'{badge_txt} &nbsp;<span style="font-size:0.8rem;font-weight:400;opacity:0.6;">{badge_count}</span>',
+            f'<div style="display:flex;align-items:center;gap:6px;padding:4px 0;">'
+            f'  <span style="font-size:1.1rem;font-weight:800;color:#1e293b;letter-spacing:-0.01em;">'
+            f'    📇 Google Contacts</span>'
+            f'  {pending_pill}'
+            f'  <span style="font-size:0.72rem;color:#94a3b8;margin-left:4px;">{badge_count}</span>'
+            f'</div>',
             unsafe_allow_html=True,
         )
     with hcol2:
         save_clicked = st.button("💾 Değişiklikleri Kaydet", type="primary", key="save_btn", use_container_width=True)
     with hcol3:
-        if st.button("➕ Yeni Kişi", type="secondary", use_container_width=True):
+        if st.button("➕ Yeni Kişi", use_container_width=True):
             new_contact_dialog()
 
     # Dahili kolonlar her zaman grid'e gider; display kolonlar build_grid_options'da
