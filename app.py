@@ -48,6 +48,8 @@ def init_state():
         "force_grid_reload": False,  # bulk op sonrası grid'i yenile
         "visible_cols": ["Ad", "Soyad", "Cep Telefonu", "E-posta", "Şirket", "Etiketler", "Oluşturulma"],
         "detail_shown_for": None,  # en son dialog açılan rn — aynı satır için tekrar açılmaz
+        "_post_save_reload": False,  # kaydet sonrası grid key değişmeden reload
+        "_saved_selection_rns": [],  # kaydet sonrası geri yüklenecek seçimler
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -1417,8 +1419,19 @@ section[data-testid="stSidebar"] [data-testid="stMultiSelect"] span[data-baseweb
         return
 
     # ── Grid (tam genişlik) ──────────────────────────────────────────────────
+    # Post-save reload: key değişmeden veriyi yenile, seçimi koru
+    post_save = st.session_state.get("_post_save_reload", False)
+    if post_save:
+        st.session_state["_post_save_reload"] = False
+        saved_rns = set(st.session_state.get("_saved_selection_rns", []))
+        if saved_rns and st.session_state.grid_data is not None:
+            gd = st.session_state.grid_data
+            restored = gd[gd["_resource_name"].isin(saved_rns)].to_dict("records")
+            st.session_state.selected_rows = restored
+        st.session_state["_saved_selection_rns"] = []
+
     reload_grid = should_reload or force_grid_reload
-    if reload_grid:
+    if reload_grid and not post_save:   # post-save'de key sabit kalır → scroll/sort korunur
         st.session_state["_grid_key_v"] = st.session_state.get("_grid_key_v", 0) + 1
     grid_key = f"mg_{st.session_state.get('_grid_key_v', 0)}"
     edited_df, grid_selection = render_grid(st.session_state.grid_data, reload=reload_grid, grid_key=grid_key)
@@ -1444,6 +1457,12 @@ section[data-testid="stSidebar"] [data-testid="stMultiSelect"] span[data-baseweb
             st.toast("⚠️ Bazı satırlar kaydedilemedi: " + " | ".join(errors), icon="⚠️")
         if saved > 0:
             st.toast(f"✅ {saved} kişi güncellendi.", icon="✅")
+            # Seçili satırların resource_name'lerini kaydet — reload sonrası geri yüklenecek
+            st.session_state["_saved_selection_rns"] = [
+                r["_resource_name"] for r in st.session_state.get("selected_rows", [])
+                if r.get("_resource_name")
+            ]
+            st.session_state["_post_save_reload"] = True
             st.session_state.pending_edits = {}
             load_data(show_spinner=False)
             st.rerun()
