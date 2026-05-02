@@ -1028,48 +1028,62 @@ def _render_action_bar(selected_rows: list):
                     help="Seçili etiketi kişilere ata"):
         if sel_group != "— Etiket Seç —":
             grn = st.session_state.groups_map_inv.get(sel_group)
-            contacts_api.assign_labels_to_contacts(service, resource_names, grn)
-            dfs_to_update = [st.session_state.df, st.session_state.df_original]
-            if st.session_state.grid_data is not None:
-                dfs_to_update.append(st.session_state.grid_data)
-            for rn in resource_names:
-                for df_ref in dfs_to_update:
-                    mask = df_ref["_resource_name"] == rn
-                    if mask.any():
-                        cur = str(df_ref.loc[mask, "Etiketler"].iloc[0] or "").strip()
-                        lbls = {l.strip() for l in cur.split(",") if l.strip()}
-                        lbls.add(sel_group)
-                        df_ref.loc[mask, "Etiketler"] = ", ".join(sorted(lbls))
-            st.toast(f"✅ '{sel_group}' etiketi {len(resource_names)} kişiye atandı.")
-            sel_rns = {r["_resource_name"] for r in st.session_state.get("selected_rows", []) if r.get("_resource_name")}
-            if sel_rns and st.session_state.grid_data is not None:
-                gd = st.session_state.grid_data
-                st.session_state.selected_rows = gd[gd["_resource_name"].isin(sel_rns)].to_dict("records")
-            st.session_state.force_grid_reload = True
-            st.rerun()
+            if grn is None:
+                st.error(f"'{sel_group}' etiketi bulunamadı. Sayfayı yenileyip tekrar deneyin.")
+            else:
+                try:
+                    contacts_api.assign_labels_to_contacts(service, resource_names, grn)
+                except Exception as exc:
+                    st.error(f"Etiket atanamadı: {exc}")
+                else:
+                    dfs_to_update = [st.session_state.df, st.session_state.df_original]
+                    if st.session_state.grid_data is not None:
+                        dfs_to_update.append(st.session_state.grid_data)
+                    for rn in resource_names:
+                        for df_ref in dfs_to_update:
+                            mask = df_ref["_resource_name"] == rn
+                            if mask.any():
+                                cur = str(df_ref.loc[mask, "Etiketler"].iloc[0] or "").strip()
+                                lbls = {l.strip() for l in cur.split(",") if l.strip()}
+                                lbls.add(sel_group)
+                                df_ref.loc[mask, "Etiketler"] = ", ".join(sorted(lbls))
+                    st.toast(f"✅ '{sel_group}' etiketi {len(resource_names)} kişiye atandı.")
+                    sel_rns = {r["_resource_name"] for r in st.session_state.get("selected_rows", []) if r.get("_resource_name")}
+                    if sel_rns and st.session_state.grid_data is not None:
+                        gd = st.session_state.grid_data
+                        st.session_state.selected_rows = gd[gd["_resource_name"].isin(sel_rns)].to_dict("records")
+                    st.session_state.force_grid_reload = True
+                    st.rerun()
 
     if c_kldr.button("Kaldır", key="bulk_remove_lbl_btn", use_container_width=True,
                      help="Seçili etiketi kişilerden kaldır"):
         if sel_group != "— Etiket Seç —":
             grn = st.session_state.groups_map_inv.get(sel_group)
-            contacts_api.remove_label_from_contacts(service, resource_names, grn)
-            dfs_to_update = [st.session_state.df, st.session_state.df_original]
-            if st.session_state.grid_data is not None:
-                dfs_to_update.append(st.session_state.grid_data)
-            for rn in resource_names:
-                for df_ref in dfs_to_update:
-                    mask = df_ref["_resource_name"] == rn
-                    if mask.any():
-                        cur = str(df_ref.loc[mask, "Etiketler"].iloc[0] or "").strip()
-                        lbls = {l.strip() for l in cur.split(",") if l.strip()} - {sel_group}
-                        df_ref.loc[mask, "Etiketler"] = ", ".join(sorted(lbls))
-            st.toast(f"✅ '{sel_group}' etiketi {len(resource_names)} kişiden kaldırıldı.")
-            sel_rns = {r["_resource_name"] for r in st.session_state.get("selected_rows", []) if r.get("_resource_name")}
-            if sel_rns and st.session_state.grid_data is not None:
-                gd = st.session_state.grid_data
-                st.session_state.selected_rows = gd[gd["_resource_name"].isin(sel_rns)].to_dict("records")
-            st.session_state.force_grid_reload = True
-            st.rerun()
+            if grn is None:
+                st.error(f"'{sel_group}' etiketi bulunamadı. Sayfayı yenileyip tekrar deneyin.")
+            else:
+                try:
+                    contacts_api.remove_label_from_contacts(service, resource_names, grn)
+                except Exception as exc:
+                    st.error(f"Etiket kaldırılamadı: {exc}")
+                else:
+                    dfs_to_update = [st.session_state.df, st.session_state.df_original]
+                    if st.session_state.grid_data is not None:
+                        dfs_to_update.append(st.session_state.grid_data)
+                    for rn in resource_names:
+                        for df_ref in dfs_to_update:
+                            mask = df_ref["_resource_name"] == rn
+                            if mask.any():
+                                cur = str(df_ref.loc[mask, "Etiketler"].iloc[0] or "").strip()
+                                lbls = {l.strip() for l in cur.split(",") if l.strip()} - {sel_group}
+                                df_ref.loc[mask, "Etiketler"] = ", ".join(sorted(lbls))
+                    st.toast(f"✅ '{sel_group}' etiketi {len(resource_names)} kişiden kaldırıldı.")
+                    sel_rns = {r["_resource_name"] for r in st.session_state.get("selected_rows", []) if r.get("_resource_name")}
+                    if sel_rns and st.session_state.grid_data is not None:
+                        gd = st.session_state.grid_data
+                        st.session_state.selected_rows = gd[gd["_resource_name"].isin(sel_rns)].to_dict("records")
+                    st.session_state.force_grid_reload = True
+                    st.rerun()
 
     # ── Sil butonu ────────────────────────────────────────────────────────────
     with c_sil:
@@ -1466,7 +1480,14 @@ section[data-testid="stSidebar"] [data-testid="stMultiSelect"] span[data-baseweb
 
     # post_save'de reload=False → ag-grid iç state'ini (scroll, sort, filter) korur
     render_reload = reload_grid and not post_save
+    # Toplu işlem öncesinde seçimi yedekle: reload_data=True sonrası ag-grid seçimi
+    # döndürmeyebilir; bu durumda rerun öncesi ayarladığımız selected_rows'u kullanırız.
+    pre_render_selection = st.session_state.selected_rows if force_grid_reload else None
     edited_df, grid_selection = render_grid(st.session_state.grid_data, reload=render_reload, grid_key=grid_key)
+
+    # force_grid_reload sonrası ag-grid seçimi sıfırladıysa, önceki seçimi geri yükle
+    if force_grid_reload and not grid_selection and pre_render_selection:
+        grid_selection = pre_render_selection
 
     # Seçimi kaydet (ekstra rerun olmadan)
     st.session_state.selected_rows = grid_selection
