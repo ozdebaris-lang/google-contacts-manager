@@ -48,8 +48,9 @@ def init_state():
         "force_grid_reload": False,  # bulk op sonrası grid'i yenile
         "visible_cols": ["Ad", "Soyad", "Cep Telefonu", "E-posta", "Şirket", "Etiketler", "Oluşturulma"],
         "detail_shown_for": None,  # en son dialog açılan rn — aynı satır için tekrar açılmaz
-        "_post_save_reload": False,  # kaydet sonrası grid key değişmeden reload
+        "_post_save_reload": False,  # kaydet sonrası grid key + reload değişmeden refresh
         "_saved_selection_rns": [],  # kaydet sonrası geri yüklenecek seçimler
+        "_saved_grid_data": None,    # kaydet öncesi grid_data yedeği — scroll/sort korunur
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -1419,10 +1420,16 @@ section[data-testid="stSidebar"] [data-testid="stMultiSelect"] span[data-baseweb
         return
 
     # ── Grid (tam genişlik) ──────────────────────────────────────────────────
-    # Post-save reload: key değişmeden veriyi yenile, seçimi koru
+    # Post-save: grid key + reload sabit kalır → scroll/sort/column-filter korunur
     post_save = st.session_state.get("_post_save_reload", False)
     if post_save:
         st.session_state["_post_save_reload"] = False
+        # Yedeklenen grid_data'yı geri yükle (load_data None'a sıfırlamıştı)
+        saved_grid = st.session_state.get("_saved_grid_data")
+        if saved_grid is not None:
+            st.session_state.grid_data = saved_grid
+            st.session_state["_saved_grid_data"] = None
+        # Seçimi resource_name üzerinden geri yükle
         saved_rns = set(st.session_state.get("_saved_selection_rns", []))
         if saved_rns and st.session_state.grid_data is not None:
             gd = st.session_state.grid_data
@@ -1430,11 +1437,18 @@ section[data-testid="stSidebar"] [data-testid="stMultiSelect"] span[data-baseweb
             st.session_state.selected_rows = restored
         st.session_state["_saved_selection_rns"] = []
 
+    # grid_data yeniden inşa: filtre/arama/veri değişince — ama post_save'de değil
+    if (should_reload or st.session_state.grid_data is None) and not post_save:
+        st.session_state.grid_data = df_view.copy()
+
     reload_grid = should_reload or force_grid_reload
-    if reload_grid and not post_save:   # post-save'de key sabit kalır → scroll/sort korunur
+    if reload_grid and not post_save:
         st.session_state["_grid_key_v"] = st.session_state.get("_grid_key_v", 0) + 1
     grid_key = f"mg_{st.session_state.get('_grid_key_v', 0)}"
-    edited_df, grid_selection = render_grid(st.session_state.grid_data, reload=reload_grid, grid_key=grid_key)
+
+    # post_save'de reload=False → ag-grid iç state'ini (scroll, sort, filter) korur
+    render_reload = reload_grid and not post_save
+    edited_df, grid_selection = render_grid(st.session_state.grid_data, reload=render_reload, grid_key=grid_key)
 
     # Seçimi kaydet (ekstra rerun olmadan)
     st.session_state.selected_rows = grid_selection
@@ -1444,7 +1458,7 @@ section[data-testid="stSidebar"] [data-testid="stMultiSelect"] span[data-baseweb
         _render_action_bar(grid_selection)
 
     # VALUE_CHANGED / SELECTION_CHANGED rerun'larında editları pending_edits'e kaydet.
-    if not should_reload and not force_grid_reload and edited_df is not None and not edited_df.empty:
+    if not render_reload and edited_df is not None and not edited_df.empty:
         _sync_pending_edits(edited_df)
 
     # ── Kaydet (buton başlık satırında; mantık grid sonrası çalışır) ─────────
@@ -1457,11 +1471,12 @@ section[data-testid="stSidebar"] [data-testid="stMultiSelect"] span[data-baseweb
             st.toast("⚠️ Bazı satırlar kaydedilemedi: " + " | ".join(errors), icon="⚠️")
         if saved > 0:
             st.toast(f"✅ {saved} kişi güncellendi.", icon="✅")
-            # Seçili satırların resource_name'lerini kaydet — reload sonrası geri yüklenecek
             st.session_state["_saved_selection_rns"] = [
                 r["_resource_name"] for r in st.session_state.get("selected_rows", [])
                 if r.get("_resource_name")
             ]
+            # grid_data'yı yedekle: load_data None'a sıfırlar, biz eski halini koruruz
+            st.session_state["_saved_grid_data"] = st.session_state.grid_data
             st.session_state["_post_save_reload"] = True
             st.session_state.pending_edits = {}
             load_data(show_spinner=False)
