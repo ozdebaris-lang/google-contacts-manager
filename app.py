@@ -757,7 +757,10 @@ def _apply_email_lowercase(resource_names: list) -> int:
             new_val = cur.lower()
             if new_val != cur:
                 pending.setdefault(rn, {})[col] = new_val
-                for df_ref in [st.session_state.df, st.session_state.df_original]:
+                dfs_to_update = [st.session_state.df, st.session_state.df_original]
+                if st.session_state.grid_data is not None:
+                    dfs_to_update.append(st.session_state.grid_data)
+                for df_ref in dfs_to_update:
                     mask = df_ref["_resource_name"] == rn
                     if mask.any():
                         df_ref.loc[mask, col] = new_val
@@ -1006,8 +1009,11 @@ def _render_action_bar(selected_rows: list):
         cnt = _apply_email_lowercase(resource_names)
         if cnt:
             st.toast(f"✅ {cnt} kişinin e-postası küçültüldü.")
-            st.session_state.grid_data = None
-            st.session_state.data_version += 1
+            sel_rns = {r["_resource_name"] for r in st.session_state.get("selected_rows", []) if r.get("_resource_name")}
+            if sel_rns and st.session_state.grid_data is not None:
+                gd = st.session_state.grid_data
+                st.session_state.selected_rows = gd[gd["_resource_name"].isin(sel_rns)].to_dict("records")
+            st.session_state.force_grid_reload = True
             st.rerun()
         else:
             st.toast("E-postalarda büyük harf bulunamadı.")
@@ -1023,8 +1029,11 @@ def _render_action_bar(selected_rows: list):
         if sel_group != "— Etiket Seç —":
             grn = st.session_state.groups_map_inv.get(sel_group)
             contacts_api.assign_labels_to_contacts(service, resource_names, grn)
+            dfs_to_update = [st.session_state.df, st.session_state.df_original]
+            if st.session_state.grid_data is not None:
+                dfs_to_update.append(st.session_state.grid_data)
             for rn in resource_names:
-                for df_ref in [st.session_state.df, st.session_state.df_original]:
+                for df_ref in dfs_to_update:
                     mask = df_ref["_resource_name"] == rn
                     if mask.any():
                         cur = str(df_ref.loc[mask, "Etiketler"].iloc[0] or "").strip()
@@ -1032,8 +1041,11 @@ def _render_action_bar(selected_rows: list):
                         lbls.add(sel_group)
                         df_ref.loc[mask, "Etiketler"] = ", ".join(sorted(lbls))
             st.toast(f"✅ '{sel_group}' etiketi {len(resource_names)} kişiye atandı.")
-            st.session_state.grid_data = None
-            st.session_state.data_version += 1
+            sel_rns = {r["_resource_name"] for r in st.session_state.get("selected_rows", []) if r.get("_resource_name")}
+            if sel_rns and st.session_state.grid_data is not None:
+                gd = st.session_state.grid_data
+                st.session_state.selected_rows = gd[gd["_resource_name"].isin(sel_rns)].to_dict("records")
+            st.session_state.force_grid_reload = True
             st.rerun()
 
     if c_kldr.button("Kaldır", key="bulk_remove_lbl_btn", use_container_width=True,
@@ -1041,16 +1053,22 @@ def _render_action_bar(selected_rows: list):
         if sel_group != "— Etiket Seç —":
             grn = st.session_state.groups_map_inv.get(sel_group)
             contacts_api.remove_label_from_contacts(service, resource_names, grn)
+            dfs_to_update = [st.session_state.df, st.session_state.df_original]
+            if st.session_state.grid_data is not None:
+                dfs_to_update.append(st.session_state.grid_data)
             for rn in resource_names:
-                for df_ref in [st.session_state.df, st.session_state.df_original]:
+                for df_ref in dfs_to_update:
                     mask = df_ref["_resource_name"] == rn
                     if mask.any():
                         cur = str(df_ref.loc[mask, "Etiketler"].iloc[0] or "").strip()
                         lbls = {l.strip() for l in cur.split(",") if l.strip()} - {sel_group}
                         df_ref.loc[mask, "Etiketler"] = ", ".join(sorted(lbls))
             st.toast(f"✅ '{sel_group}' etiketi {len(resource_names)} kişiden kaldırıldı.")
-            st.session_state.grid_data = None
-            st.session_state.data_version += 1
+            sel_rns = {r["_resource_name"] for r in st.session_state.get("selected_rows", []) if r.get("_resource_name")}
+            if sel_rns and st.session_state.grid_data is not None:
+                gd = st.session_state.grid_data
+                st.session_state.selected_rows = gd[gd["_resource_name"].isin(sel_rns)].to_dict("records")
+            st.session_state.force_grid_reload = True
             st.rerun()
 
     # ── Sil butonu ────────────────────────────────────────────────────────────
@@ -1442,7 +1460,7 @@ section[data-testid="stSidebar"] [data-testid="stMultiSelect"] span[data-baseweb
         st.session_state.grid_data = df_view.copy()
 
     reload_grid = should_reload or force_grid_reload
-    if reload_grid and not post_save:
+    if should_reload and not post_save:
         st.session_state["_grid_key_v"] = st.session_state.get("_grid_key_v", 0) + 1
     grid_key = f"mg_{st.session_state.get('_grid_key_v', 0)}"
 
