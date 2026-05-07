@@ -973,7 +973,7 @@ def _render_action_bar(selected_rows: list):
             f'<div class="tb-name">👤 {full_name}</div>',
             unsafe_allow_html=True,
         )
-        if c_det.button("Detay", key="act_det", use_container_width=True, help="Kişi detaylarını görüntüle"):
+        if c_det.button("Detay", key="act_det", use_container_width=True):
             contact_detail_dialog(row["_resource_name"])
     else:
         c_id.markdown(
@@ -987,22 +987,18 @@ def _render_action_bar(selected_rows: list):
     c_v3.markdown('<div class="vsep"></div>', unsafe_allow_html=True)
 
     # ── Metin işlemleri ───────────────────────────────────────────────────────
-    if c_aa.button("Aa Title", key="bulk_title_btn", use_container_width=True,
-                   help="İsim ve soyadı başlık biçiminde yaz (Ahmet Yılmaz)"):
+    if c_aa.button("Aa", key="bulk_title_btn", use_container_width=True):
         cnt = _apply_bulk_case(resource_names, "title")
         st.toast(f"✅ {cnt} kişi güncellendi.")
 
-    if c_AA.button("AA BÜYÜK", key="bulk_upper_btn", use_container_width=True,
-                   help="İsim ve soyadını tamamen büyük harfe çevir"):
+    if c_AA.button("AA", key="bulk_upper_btn", use_container_width=True):
         cnt = _apply_bulk_case(resource_names, "upper")
         st.toast(f"✅ {cnt} kişi güncellendi.")
 
-    if c_tr.button("🇹🇷 TR Düzelt", key="bulk_tr_btn", use_container_width=True,
-                   help="Türkçe karakter içermeyen isimleri listele ve düzelt"):
+    if c_tr.button("TR", key="bulk_tr_btn", use_container_width=True):
         turkish_fix_dialog(resource_names)
 
-    if c_at.button("@↓", key="bulk_email_lower_btn", use_container_width=True,
-                   help="E-posta adreslerini küçük harfe çevir"):
+    if c_at.button("@↓", key="bulk_email_lower_btn", use_container_width=True):
         cnt = _apply_email_lowercase(resource_names)
         if cnt:
             st.toast(f"✅ {cnt} kişinin e-postası küçültüldü.")
@@ -1022,7 +1018,6 @@ def _render_action_bar(selected_rows: list):
     )
 
     if c_ata.button("Ata", key="bulk_assign_btn", use_container_width=True,
-                    help="Seçili etiketi kişilere ata",
                     disabled=(sel_group == "— Etiket Seç —")):
         if sel_group != "— Etiket Seç —":
             grn = st.session_state.groups_map_inv.get(sel_group)
@@ -1061,7 +1056,6 @@ def _render_action_bar(selected_rows: list):
                     st.rerun()
 
     if c_kldr.button("Kaldır", key="bulk_remove_lbl_btn", use_container_width=True,
-                     help="Seçili etiketi kişilerden kaldır",
                      disabled=(sel_group == "— Etiket Seç —")):
         if sel_group != "— Etiket Seç —":
             grn = st.session_state.groups_map_inv.get(sel_group)
