@@ -1048,6 +1048,13 @@ def _render_action_bar(selected_rows: list):
                                 lbls.add(sel_group)
                                 df_ref.loc[mask, "Etiketler"] = ", ".join(sorted(lbls))
                     st.toast(f"✅ '{sel_group}' etiketi {len(resource_names)} kişiye atandı.")
+                    # Etiketler alanındaki stale pending edit'i temizle —
+                    # aksi hâlde save_changes() sync_contact_labels ile atamayı geri alır.
+                    for rn in resource_names:
+                        if rn in st.session_state.pending_edits:
+                            st.session_state.pending_edits[rn].pop("Etiketler", None)
+                            if not st.session_state.pending_edits[rn]:
+                                del st.session_state.pending_edits[rn]
                     sel_rns = {r["_resource_name"] for r in st.session_state.get("selected_rows", []) if r.get("_resource_name")}
                     if sel_rns and st.session_state.grid_data is not None:
                         gd = st.session_state.grid_data
@@ -1078,6 +1085,12 @@ def _render_action_bar(selected_rows: list):
                                 lbls = {l.strip() for l in cur.split(",") if l.strip()} - {sel_group}
                                 df_ref.loc[mask, "Etiketler"] = ", ".join(sorted(lbls))
                     st.toast(f"✅ '{sel_group}' etiketi {len(resource_names)} kişiden kaldırıldı.")
+                    # Etiketler alanındaki stale pending edit'i temizle.
+                    for rn in resource_names:
+                        if rn in st.session_state.pending_edits:
+                            st.session_state.pending_edits[rn].pop("Etiketler", None)
+                            if not st.session_state.pending_edits[rn]:
+                                del st.session_state.pending_edits[rn]
                     sel_rns = {r["_resource_name"] for r in st.session_state.get("selected_rows", []) if r.get("_resource_name")}
                     if sel_rns and st.session_state.grid_data is not None:
                         gd = st.session_state.grid_data
@@ -1474,7 +1487,7 @@ section[data-testid="stSidebar"] [data-testid="stMultiSelect"] span[data-baseweb
         st.session_state.grid_data = df_view.copy()
 
     reload_grid = should_reload or force_grid_reload
-    if should_reload and not post_save:
+    if reload_grid and not post_save:
         st.session_state["_grid_key_v"] = st.session_state.get("_grid_key_v", 0) + 1
     grid_key = f"mg_{st.session_state.get('_grid_key_v', 0)}"
 
