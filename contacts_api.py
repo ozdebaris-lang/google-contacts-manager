@@ -523,7 +523,7 @@ def apply_filter(df: pd.DataFrame, filter_name: str) -> pd.DataFrame:
         return df[no_cep & no_second].reset_index(drop=True)
     if filter_name == "E-postası olmayanlar":
         return df[df["E-posta"].str.strip() == ""].reset_index(drop=True)
-    if filter_name == "Şirketi/Ünvanı olmayanlar":
+    if filter_name == "Şirketi olmayanlar":
         return df[(df["Şirket"].str.strip() == "") & (df["Ünvan"].str.strip() == "")].reset_index(drop=True)
     if filter_name == "Yinelenen isimler":
         ad = df["Ad"].str.strip().str.lower()

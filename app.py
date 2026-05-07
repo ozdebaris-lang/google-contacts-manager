@@ -46,7 +46,7 @@ def init_state():
         "grid_data": None,       # AgGrid'e geçilen son veri
         "pending_edits": {},     # {resource_name: {field: yeni_değer}} — VALUE_CHANGED'da dolar
         "force_grid_reload": False,  # bulk op sonrası grid'i yenile
-        "visible_cols": ["Ad", "Soyad", "Cep Telefonu", "E-posta", "Şirket", "Etiketler", "Oluşturulma"],
+        "visible_cols": ["Ad", "Soyad", "Cep Telefonu", "E-posta", "Etiketler"],
         "detail_shown_for": None,  # en son dialog açılan rn — aynı satır için tekrar açılmaz
         "_post_save_reload": False,  # kaydet sonrası grid key + reload değişmeden refresh
         "_saved_selection_rns": [],  # kaydet sonrası geri yüklenecek seçimler
@@ -232,13 +232,10 @@ def new_contact_dialog():
         soyad  = c2.text_input("Soyad")
         c3, c4 = st.columns(2)
         cep    = c3.text_input("Cep Telefonu")
-        tel    = c4.text_input("2. Telefon")
+        eposta = c4.text_input("E-posta")
         c5, c6 = st.columns(2)
-        eposta  = c5.text_input("E-posta")
-        eposta2 = c6.text_input("2. E-posta")
-        c7, c8 = st.columns(2)
-        sirket = c7.text_input("Şirket / Firma")
-        unvan  = c8.text_input("Ünvan / Title")
+        sirket = c5.text_input("Şirket / Firma")
+        unvan  = c6.text_input("Ünvan / Title")
         adres  = st.text_input("Adres")
         notlar = st.text_area("Notlar", height=70)
         submitted = st.form_submit_button("💾 Kaydet", use_container_width=True, type="primary")
@@ -249,8 +246,8 @@ def new_contact_dialog():
                 contacts_api.create_contact(
                     service,
                     {"Ad": ad, "Soyad": soyad,
-                     "Cep Telefonu": cep, "2. Telefon": tel,
-                     "E-posta": eposta, "2. E-posta": eposta2,
+                     "Cep Telefonu": cep,
+                     "E-posta": eposta,
                      "Şirket": sirket, "Ünvan": unvan,
                      "Adres": adres, "Notlar": notlar},
                 )
@@ -478,7 +475,7 @@ def render_sidebar():
             "Tümü",
             "Telefonu olmayanlar",
             "E-postası olmayanlar",
-            "Şirketi/Ünvanı olmayanlar",
+            "Şirketi olmayanlar",
             "Yinelenen isimler",
             "Yinelenen telefonlar",
             "Birden fazla etiketli",
@@ -489,28 +486,28 @@ def render_sidebar():
         )
 
         st.session_state.search_query = st.text_input(
-            "Ara", placeholder="İsim, telefon, e-posta…",
+            "Ara", placeholder="Tümünde ara…",
             label_visibility="collapsed", key="search_input"
         )
 
         st.divider()
 
         # ── Sütunlar ─────────────────────────────────────────────────────────
-        st.markdown("**📋 Sütunlar**")
-        all_cols = ["Ad", "Soyad", "Cep Telefonu", "2. Telefon",
-                    "E-posta", "2. E-posta", "Etiketler", "Şirket", "Ünvan", "Notlar", "Adres",
-                    "Oluşturulma"]
-        # Widget key'i olmadığında default olarak visible_cols kullan;
-        # key varsa Streamlit kendi state'ini yönetir, default yok sayılır.
-        if "col_selector" not in st.session_state:
-            st.session_state["col_selector"] = list(st.session_state.visible_cols)
-        selected_cols = st.multiselect(
-            "Sütunlar", options=all_cols,
-            label_visibility="collapsed", key="col_selector",
-        )
-        new_val = selected_cols if selected_cols else all_cols
-        if new_val != st.session_state.visible_cols:
-            st.session_state.visible_cols = new_val
+        with st.expander("📋 Sütunlar", expanded=False):
+            all_cols = ["Ad", "Soyad", "Cep Telefonu", "2. Telefon",
+                        "E-posta", "2. E-posta", "Etiketler", "Şirket", "Ünvan", "Notlar", "Adres",
+                        "Oluşturulma"]
+            # Widget key'i olmadığında default olarak visible_cols kullan;
+            # key varsa Streamlit kendi state'ini yönetir, default yok sayılır.
+            if "col_selector" not in st.session_state:
+                st.session_state["col_selector"] = list(st.session_state.visible_cols)
+            selected_cols = st.multiselect(
+                "Sütunlar", options=all_cols,
+                label_visibility="collapsed", key="col_selector",
+            )
+            new_val = selected_cols if selected_cols else all_cols
+            if new_val != st.session_state.visible_cols:
+                st.session_state.visible_cols = new_val
 
         st.divider()
 
@@ -945,7 +942,7 @@ def _render_action_bar(selected_rows: list):
                 except Exception as e:
                     st.error(f"Hata oluştu: {e}")
         with btn_no:
-            if st.button("Vazgeç", key="cancel_delete", use_container_width=True):
+            if st.button("İptal", key="cancel_delete", use_container_width=True):
                 st.session_state.show_delete_confirm = False
                 st.session_state.delete_resource_names = []
                 st.rerun()
@@ -990,18 +987,18 @@ def _render_action_bar(selected_rows: list):
     c_v3.markdown('<div class="vsep"></div>', unsafe_allow_html=True)
 
     # ── Metin işlemleri ───────────────────────────────────────────────────────
-    if c_aa.button("Aa", key="bulk_title_btn", use_container_width=True,
-                   help="Title Case — Her kelimenin ilk harfini büyüt"):
+    if c_aa.button("Aa Title", key="bulk_title_btn", use_container_width=True,
+                   help="İsim ve soyadı başlık biçiminde yaz (Ahmet Yılmaz)"):
         cnt = _apply_bulk_case(resource_names, "title")
         st.toast(f"✅ {cnt} kişi güncellendi.")
 
-    if c_AA.button("AA", key="bulk_upper_btn", use_container_width=True,
-                   help="BÜYÜK HARF — Tümünü büyük harfe çevir"):
+    if c_AA.button("AA BÜYÜK", key="bulk_upper_btn", use_container_width=True,
+                   help="İsim ve soyadını tamamen büyük harfe çevir"):
         cnt = _apply_bulk_case(resource_names, "upper")
         st.toast(f"✅ {cnt} kişi güncellendi.")
 
-    if c_tr.button("🇹🇷", key="bulk_tr_btn", use_container_width=True,
-                   help="Türkçe karakter düzelt"):
+    if c_tr.button("🇹🇷 TR Düzelt", key="bulk_tr_btn", use_container_width=True,
+                   help="Türkçe karakter içermeyen isimleri listele ve düzelt"):
         turkish_fix_dialog(resource_names)
 
     if c_at.button("@↓", key="bulk_email_lower_btn", use_container_width=True,
@@ -1025,7 +1022,8 @@ def _render_action_bar(selected_rows: list):
     )
 
     if c_ata.button("Ata", key="bulk_assign_btn", use_container_width=True,
-                    help="Seçili etiketi kişilere ata"):
+                    help="Seçili etiketi kişilere ata",
+                    disabled=(sel_group == "— Etiket Seç —")):
         if sel_group != "— Etiket Seç —":
             grn = st.session_state.groups_map_inv.get(sel_group)
             if grn is None:
@@ -1063,7 +1061,8 @@ def _render_action_bar(selected_rows: list):
                     st.rerun()
 
     if c_kldr.button("Kaldır", key="bulk_remove_lbl_btn", use_container_width=True,
-                     help="Seçili etiketi kişilerden kaldır"):
+                     help="Seçili etiketi kişilerden kaldır",
+                     disabled=(sel_group == "— Etiket Seç —")):
         if sel_group != "— Etiket Seç —":
             grn = st.session_state.groups_map_inv.get(sel_group)
             if grn is None:
@@ -1456,11 +1455,19 @@ section[data-testid="stSidebar"] [data-testid="stMultiSelect"] span[data-baseweb
 
     # ── Boş durum mesajı ─────────────────────────────────────────────────────
     if df_view.empty:
-        st.markdown("""
+        if st.session_state.active_filter == "Tümü" and not st.session_state.search_query.strip():
+            _empty_icon = "📭"
+            _empty_title = "Henüz kişi yok"
+            _empty_sub = "Sidebar'dan yeni kişi ekleyebilirsiniz."
+        else:
+            _empty_icon = "🔍"
+            _empty_title = "Sonuç bulunamadı"
+            _empty_sub = "Filtre veya arama kriterini değiştir."
+        st.markdown(f"""
 <div style="text-align:center;padding:3rem 1rem;opacity:0.55;">
-  <div style="font-size:2.5rem;">🔍</div>
-  <div style="font-size:1rem;font-weight:600;margin-top:0.4rem;">Sonuç bulunamadı</div>
-  <div style="font-size:0.82rem;margin-top:0.2rem;">Filtre veya arama kriterini değiştirmeyi dene</div>
+  <div style="font-size:2.5rem;">{_empty_icon}</div>
+  <div style="font-size:1rem;font-weight:600;margin-top:0.4rem;">{_empty_title}</div>
+  <div style="font-size:0.82rem;margin-top:0.2rem;">{_empty_sub}</div>
 </div>""", unsafe_allow_html=True)
         return
 
